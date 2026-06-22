@@ -1,0 +1,15 @@
+# Environnements virtuels (Ne JAMAIS push sur Git)
+venv/
+.venv/
+env/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+
+# Variables d'environnement (Mots de passe, clés API)
+.env
+
+# Fichiers systèmes
+.DS_Store
+Thumbs.db
