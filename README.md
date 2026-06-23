@@ -17,3 +17,9 @@ npm run dev
 ## Plugins 
 
 SQLite Viewer
+
+## DB browser for SQLite 
+
+https://sqlitebrowser.org/dl/
+
+64bit for windows
