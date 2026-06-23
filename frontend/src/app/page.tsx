@@ -20,23 +20,29 @@ export default async function Home() {
             <p className="text-gray-500">Aucune agence trouvée.</p>
           ) : (
             <ul className="space-y-3">
-              {agencies.map((agency: any) => (
-                <li
-                  key={agency.id}
-                  className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold">
-                    {agency.name.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800">{agency.name}</p>
-                    <p className="text-xs text-slate-500">
-                      ID: {agency.id} | Créée le :{" "}
-                      {new Date(agency.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </li>
-              ))}
+              {agencies.map(
+                (agency: {
+                  id: string | number;
+                  name: string;
+                  created_at: string | number | Date;
+                }) => (
+                  <li
+                    key={agency.id}
+                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold">
+                      {agency.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800">{agency.name}</p>
+                      <p className="text-xs text-slate-500">
+                        ID: {agency.id} | Créée le :{" "}
+                        {new Date(agency.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </li>
+                ),
+              )}
             </ul>
           )}
         </div>
