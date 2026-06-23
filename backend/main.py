@@ -84,3 +84,25 @@ def create_document_template(agency_id: int, template: schemas.DocumentTemplateC
     db.commit()
     db.refresh(db_template)
     return db_template
+
+@app.post("/login/")
+def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    # 1. On cherche l'utilisateur par son email
+    user = db.query(models.User).filter(models.User.email == user_credentials.email).first()
+    
+    # 2. On vérifie si l'utilisateur existe ET si le mot de passe correspond
+    # (Actuellement, on vérifie en texte brut, on cryptera ça plus tard pour la prod)
+    if not user or user.hashed_password != user_credentials.password:
+        raise HTTPException(
+            status_code=401, 
+            detail="Email ou mot de passe incorrect"
+        )
+    
+    # 3. Si tout est bon, on renvoie un "feu vert" avec le rôle pour que Next.js sache où le rediriger
+    return {
+        "message": "Connexion réussie",
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "token": f"fake_token_pour_le_moment_{user.id}" 
+    }

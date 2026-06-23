@@ -52,3 +52,7 @@ class DocumentTemplateResponse(BaseModel):
     is_required_by_default: bool
     ai_validation_rules: Optional[Dict[str, Any]]
     model_config = {"from_attributes": True}
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
