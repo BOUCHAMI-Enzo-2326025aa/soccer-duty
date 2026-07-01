@@ -21,8 +21,37 @@ def admin_home(db: Session = Depends(get_db)):
 
 @router.get("/joueurs")
 def admin_players(db: Session = Depends(get_db)):
-    players = db.query(models.PlayerProfile).all()
-    return {"count": len(players), "items": players}
+    players = (
+        db.query(models.PlayerProfile)
+        .order_by(models.PlayerProfile.progress_percentage.desc())
+        .all()
+    )
+
+    university_ids = {p.university_id for p in players if p.university_id is not None}
+    universities = {}
+    if university_ids:
+        university_rows = (
+            db.query(models.University)
+            .filter(models.University.id.in_(list(university_ids)))
+            .all()
+        )
+        universities = {u.id: u.name for u in university_rows}
+
+    items = []
+    for player in players:
+        items.append(
+            {
+                "id": player.id,
+                "first_name": player.first_name,
+                "last_name": player.last_name,
+                "date_of_birth": player.date_of_birth.isoformat() if player.date_of_birth else None,
+                "university_id": player.university_id,
+                "university_name": universities.get(player.university_id, "Université non renseignée"),
+                "progress_percentage": player.progress_percentage,
+            }
+        )
+
+    return {"count": len(items), "items": items}
 
 
 @router.get("/universites")
@@ -43,9 +72,21 @@ def admin_todo(db: Session = Depends(get_db)):
         .filter(models.Milestone.status == models.MilestoneStatusEnum.UPCOMING)
         .all()
     )
+    rejected_documents = (
+        db.query(models.Document)
+        .filter(models.Document.status == models.DocStatusEnum.REJECTED)
+        .all()
+    )
+    ready_players = (
+        db.query(models.PlayerProfile)
+        .filter(models.PlayerProfile.progress_percentage >= 80)
+        .all()
+    )
     return {
         "pending_documents": pending_documents,
         "upcoming_milestones": upcoming_milestones,
+        "rejected_documents": rejected_documents,
+        "ready_players": ready_players,
     }
 
 

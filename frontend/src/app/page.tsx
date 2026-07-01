@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { login as loginRequest } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,32 +19,12 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // On frappe à la porte de ton backend FastAPI
-      const res = await fetch("http://127.0.0.1:8000/login/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.detail || "Email ou mot de passe incorrect");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!res.ok) {
-        setError(data.detail || "Email ou mot de passe incorrect");
-        setIsLoading(false);
-        return;
-      }
+      const data = await loginRequest(email, password);
 
       // --- On sauvegarde le badge dans les cookies (valable 1 jour) ---
       document.cookie = `token=${data.token}; path=/; max-age=86400`;
       document.cookie = `role=${data.role}; path=/; max-age=86400`;
+      document.cookie = `user_id=${data.user_id}; path=/; max-age=86400`;
 
       // LA MAGIE OPÈRE ICI : Redirection selon le rôle !
       if (data.role === "AGENCY_ADMIN") {
@@ -56,7 +37,9 @@ export default function LoginPage() {
       }
     } catch (err) {
       setError(
-        "Impossible de se connecter au serveur. Vérifie que FastAPI tourne.",
+        err instanceof Error
+          ? err.message
+          : "Impossible de se connecter au serveur. Vérifie que FastAPI tourne.",
       );
       setIsLoading(false);
     }

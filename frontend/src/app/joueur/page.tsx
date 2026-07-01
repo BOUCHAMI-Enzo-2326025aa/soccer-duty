@@ -1,5 +1,19 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { getPlayerDossier, getUserIdFromCookie } from "@/lib/api";
+
 export default function JoueurPage() {
-  const steps = [
+  const [apiError, setApiError] = useState("");
+  const [loadingDossier, setLoadingDossier] = useState(true);
+  const [progress, setProgress] = useState(72);
+  const [steps, setSteps] = useState<
+    Array<{
+      label: string;
+      status: "done" | "current" | "upcoming";
+      icon: string;
+    }>
+  >([
     { label: "Passeport", status: "done", icon: "✓" },
     { label: "Relevés", status: "done", icon: "✓" },
     { label: "Anglais", status: "done", icon: "✓" },
@@ -7,10 +21,141 @@ export default function JoueurPage() {
     { label: "I-20", status: "upcoming", icon: "📋" },
     { label: "Visa F1", status: "upcoming", icon: "🛂" },
     { label: "Départ", status: "upcoming", icon: "✈️" },
-  ];
+  ]);
+  const [documentStatus, setDocumentStatus] = useState<
+    Array<{ id: number; label: string; status: string }>
+  >([]);
+
+  useEffect(() => {
+    const loadDossier = async () => {
+      setApiError("");
+      setLoadingDossier(true);
+
+      try {
+        const userId = getUserIdFromCookie();
+        if (!userId) {
+          throw new Error(
+            "Session incomplète: user_id manquant, reconnectez-vous.",
+          );
+        }
+
+        const dossier = await getPlayerDossier(userId);
+        setProgress(dossier.player.progress_percentage || 0);
+
+        if (dossier.milestones.length > 0) {
+          setSteps(
+            dossier.milestones.map((milestone) => {
+              const normalized = milestone.status?.toUpperCase();
+              const status =
+                normalized === "COMPLETED"
+                  ? "done"
+                  : normalized === "CURRENT"
+                    ? "current"
+                    : "upcoming";
+              const icon =
+                status === "done" ? "✓" : status === "current" ? "🏛" : "📋";
+
+              return {
+                label: milestone.name,
+                status,
+                icon,
+              };
+            }),
+          );
+        }
+
+        setDocumentStatus(
+          dossier.documents.slice(0, 6).map((doc) => ({
+            id: doc.id,
+            label: `Document #${doc.id}`,
+            status: doc.status,
+          })),
+        );
+      } catch (err) {
+        setApiError(
+          err instanceof Error ? err.message : "Erreur de chargement",
+        );
+      } finally {
+        setLoadingDossier(false);
+      }
+    };
+
+    loadDossier();
+  }, []);
+
+  const renderDocumentRow = (item: {
+    id: number;
+    label: string;
+    status: string;
+  }) => {
+    const normalized = item.status?.toUpperCase();
+    if (normalized === "VALIDATED") {
+      return (
+        <div
+          key={item.id}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]"
+        >
+          <div className="w-[7px] h-[7px] rounded-full bg-green-custom shrink-0"></div>
+          <div className="flex-1 text-slate-900">{item.label}</div>
+          <div className="text-[10.5px] font-semibold whitespace-nowrap text-green-custom">
+            ✓ Validé
+          </div>
+        </div>
+      );
+    }
+
+    if (normalized === "PENDING") {
+      return (
+        <div
+          key={item.id}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#FFF3EC] border border-[#ffd3be] mb-2 text-[13px]"
+        >
+          <div className="w-[7px] h-[7px] rounded-full bg-orange-custom shrink-0"></div>
+          <div className="flex-1 text-slate-900">{item.label}</div>
+          <div className="text-[10.5px] font-semibold whitespace-nowrap text-orange-custom">
+            🕐 Attente
+          </div>
+        </div>
+      );
+    }
+
+    if (normalized === "REJECTED") {
+      return (
+        <div
+          key={item.id}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#FDECEC] border border-[#f6caca] mb-2 text-[13px]"
+        >
+          <div className="w-[7px] h-[7px] rounded-full bg-red-custom shrink-0"></div>
+          <div className="flex-1 text-slate-900">{item.label}</div>
+          <div className="text-[10.5px] font-semibold whitespace-nowrap text-red-custom">
+            ✗ Refusé
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={item.id}
+        className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]"
+      >
+        <div className="w-[7px] h-[7px] rounded-full bg-muted shrink-0"></div>
+        <div className="flex-1 text-slate-900">{item.label}</div>
+        <div className="text-[10.5px] font-semibold whitespace-nowrap text-muted">
+          Non envoyé
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
+      {apiError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-custom">
+          Connexion API impossible: {apiError}
+        </div>
+      )}
+
       <div className="overflow-x-auto scbar-hidden mb-5">
         <div className="flex items-start min-w-max pb-1">
           {steps.map((step, idx) => (
@@ -63,8 +208,13 @@ export default function JoueurPage() {
               </div>
             </div>
           </div>
+          <div className="mt-2 text-white/70 text-xs font-medium">
+            Progression dossier: {loadingDossier ? "..." : `${progress}%`}
+          </div>
           <div className="mt-2.5 inline-flex items-center gap-1.5 bg-orange-custom/20 text-[#ffb89a] px-3 py-1.5 rounded-full text-[11.5px] font-semibold sm:text-[10.5px]">
-            🕐 En attente de validation
+            {loadingDossier
+              ? "⏳ Chargement du dossier..."
+              : "🕐 En attente de validation"}
           </div>
         </div>
 
@@ -183,31 +333,13 @@ export default function JoueurPage() {
                   Statut de vos documents
                 </div>
 
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]">
-                  <div className="w-[7px] h-[7px] rounded-full bg-green-custom shrink-0"></div>
-                  <div className="flex-1 text-slate-900">Relevés envoyés à la NCAA</div>
-                  <div className="text-[10.5px] font-semibold whitespace-nowrap text-green-custom">
-                    ✓ Validé
+                {documentStatus.length > 0 ? (
+                  documentStatus.map(renderDocumentRow)
+                ) : (
+                  <div className="text-[13px] text-muted">
+                    Aucun document trouvé pour ce dossier.
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#FFF3EC] border border-[#ffd3be] mb-2 text-[13px]">
-                  <div className="w-[7px] h-[7px] rounded-full bg-orange-custom shrink-0"></div>
-                  <div className="flex-1 text-slate-900">
-                    Confirmation eligibilitycenter.org
-                  </div>
-                  <div className="text-[10.5px] font-semibold whitespace-nowrap text-orange-custom">
-                    🕐 Attente
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]">
-                  <div className="w-[7px] h-[7px] rounded-full bg-muted shrink-0"></div>
-                  <div className="flex-1 text-slate-900">Clearance finale NCAA</div>
-                  <div className="text-[10.5px] font-semibold whitespace-nowrap text-muted">
-                    Non envoyé
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className="bg-gradient-to-br from-navy to-[#2a3f7a] rounded-xl p-3.5 mt-4 flex items-center gap-3">
@@ -229,7 +361,9 @@ export default function JoueurPage() {
                 </div>
                 <div className="bg-sd-bg rounded-lg p-2.5 mb-2 text-[12.5px] max-h-[130px] overflow-y-auto">
                   <div className="mb-2">
-                    <span className="font-semibold text-[11px] text-slate-900">Noah</span>
+                    <span className="font-semibold text-[11px] text-slate-900">
+                      Noah
+                    </span>
                     <span className="text-muted text-[10px] ml-1">
                       12/06 14:22
                     </span>
