@@ -84,6 +84,12 @@ class PlayerProfile(Base):
     date_of_birth = Column(DateTime)
     university_id = Column(Integer, ForeignKey("universities.id"), nullable=True)
     progress_percentage = Column(Integer, default=0)
+    phone = Column(String, nullable=True)
+    dossier_stage = Column(String, nullable=True)
+    recruitment_status = Column(String, nullable=True)
+    service_plan = Column(String, nullable=True)
+    acquisition_channel = Column(String, nullable=True)
+    intake_period = Column(String, nullable=True)
 
     user = relationship("User", back_populates="player_profile")
     university = relationship("University")

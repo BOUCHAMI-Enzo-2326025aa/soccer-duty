@@ -22,10 +22,48 @@ export type AdminPlayer = {
   id: number;
   first_name: string;
   last_name: string;
+  email: string;
+  phone: string | null;
   date_of_birth: string | null;
   university_id: number | null;
   university_name: string;
   progress_percentage: number;
+  dossier_stage: "Trad" | "Eval" | "Done";
+  recruitment_status:
+    | "Prospection"
+    | "Offres en attente"
+    | "NLI Signée"
+    | "Paiement en attente"
+    | "I-20 reçu"
+    | "Immigration effectuée"
+    | "Visa reçu";
+  service_plan: "Formule A" | "Formule B";
+  acquisition_channel:
+    | "Instagram"
+    | "TikTok"
+    | "Bouche à oreille"
+    | "Formulaire";
+  intake_period: "Spring" | "Fall";
+};
+
+export type UpdateAdminPlayerPayload = {
+  phone: string | null;
+  dossier_stage: "Trad" | "Eval" | "Done";
+  recruitment_status:
+    | "Prospection"
+    | "Offres en attente"
+    | "NLI Signée"
+    | "Paiement en attente"
+    | "I-20 reçu"
+    | "Immigration effectuée"
+    | "Visa reçu";
+  service_plan: "Formule A" | "Formule B";
+  acquisition_channel:
+    | "Instagram"
+    | "TikTok"
+    | "Bouche à oreille"
+    | "Formulaire";
+  intake_period: "Spring" | "Fall";
 };
 
 type ListResponse<T> = {
@@ -82,9 +120,18 @@ async function apiFetch<T>(
     let detail = `Erreur API (${response.status})`;
     try {
       const data = await response.json();
-      if (data?.detail) detail = data.detail;
+      if (data?.detail) {
+        // Si c'est un texte simple, on l'affiche directement
+        if (typeof data.detail === "string") {
+          detail = data.detail;
+        } else {
+          // Si c'est un objet ou tableau (erreur FastAPI 422 par exemple)
+          // on le transforme en texte lisible pour ne pas avoir "[object Object]"
+          detail = JSON.stringify(data.detail);
+        }
+      }
     } catch {
-      // Keep generic message when backend response is not JSON.
+      // Garder le message générique si la réponse n'est pas du JSON
     }
     throw new Error(detail);
   }
@@ -126,8 +173,29 @@ export async function getAdminTodo() {
   }>("/admin/todo");
 }
 
-export async function getAdminPlayers() {
-  return apiFetch<ListResponse<AdminPlayer>>("/admin/joueurs");
+export async function getAdminPlayers(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<ListResponse<AdminPlayer>>(`/admin/joueurs${query}`);
+}
+
+export async function updateAdminPlayer(
+  playerId: number,
+  payload: UpdateAdminPlayerPayload,
+  adminUserId: number,
+) {
+  return apiFetch<AdminPlayer>(
+    `/admin/joueurs/${playerId}?admin_user_id=${adminUserId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function getAdminNotifications() {
