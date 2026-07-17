@@ -13,3 +13,10 @@ __pycache__/
 # Fichiers systèmes
 .DS_Store
 Thumbs.db
+
+# Fichiers de bd   
+*.db 
+*.sqlite
+*.sqlite3
+*.sql
+*.backup-*

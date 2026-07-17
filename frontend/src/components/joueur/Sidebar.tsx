@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
 
 export default function Sidebar({
   isOpen,
@@ -11,6 +11,7 @@ export default function Sidebar({
   closeSidebar: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter(); // <-- Initialisation du router
 
   const navItems = [
     { name: "Mon Dossier", icon: "📂", path: "/joueur" },
@@ -19,6 +20,16 @@ export default function Sidebar({
     { name: "Messagerie", icon: "💬", path: "/joueur/messages" },
     { name: "Aide", icon: "❓", path: "/joueur/aide" },
   ];
+
+  // --- NOUVEAU : La fonction de déconnexion ---
+  const handleLogout = () => {
+    // 1. On "détruit" les cookies en mettant leur date d'expiration dans le passé (1970)
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+
+    // 2. On renvoie l'utilisateur sur la page de Login
+    router.push("/");
+  };
 
   return (
     <>
@@ -47,31 +58,45 @@ export default function Sidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto pt-1.5">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.path ||
-              (item.path !== "/joueur" && pathname.startsWith(item.path));
-            return (
-              <Link
-                href={item.path}
-                key={item.name}
-                className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer text-[13.5px] transition-all relative ${
-                  isActive
-                    ? "text-navy bg-[#EEF4FF] font-semibold"
-                    : "text-muted font-medium hover:text-navy hover:bg-sd-bg"
-                }`}
-              >
-                {isActive && (
-                  <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-green-custom rounded-r-sm"></div>
-                )}
-                <span className="text-base w-5 text-center shrink-0">
-                  {item.icon}
-                </span>
-                {item.name}
-              </Link>
-            );
-          })}
+        {/* J'ai ajouté flex et flex-col ici pour pouvoir pousser le bouton en bas */}
+        <div className="flex-1 overflow-y-auto pt-1.5 flex flex-col">
+          <div className="flex-1">
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.path ||
+                (item.path !== "/joueur" && pathname.startsWith(item.path));
+              return (
+                <Link
+                  href={item.path}
+                  key={item.name}
+                  className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer text-[13.5px] transition-all relative ${
+                    isActive
+                      ? "text-navy bg-[#EEF4FF] font-semibold"
+                      : "text-muted font-medium hover:text-navy hover:bg-sd-bg"
+                  }`}
+                >
+                  {isActive && (
+                    <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-green-custom rounded-r-sm"></div>
+                  )}
+                  <span className="text-base w-5 text-center shrink-0">
+                    {item.icon}
+                  </span>
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* --- NOUVEAU : Bouton Déconnexion --- */}
+          <div className="px-2 mt-4 mb-2">
+            <button
+              onClick={handleLogout}
+              className="flex items-center w-full gap-2.5 px-2 py-2.5 cursor-pointer text-[13.5px] transition-all text-red-custom font-medium hover:bg-red-50 rounded-lg"
+            >
+              <span className="text-base w-5 text-center shrink-0">🚪</span>
+              Déconnexion
+            </button>
+          </div>
         </div>
 
         <div className="m-3.5 mb-4 bg-gradient-to-br from-navy to-navy-light text-white rounded-[10px] p-3 cursor-pointer text-center">
