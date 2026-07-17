@@ -20,4 +20,3 @@ Thumbs.db
 *.sqlite3
 *.sql
 *.backup-*
-/migrations/
