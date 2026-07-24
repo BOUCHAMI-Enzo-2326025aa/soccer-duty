@@ -11,8 +11,11 @@ Base = declarative_base()
 # ==========================================
 class RoleEnum(enum.Enum):
     SUPER_ADMIN = "SUPER_ADMIN"
-    AGENCY_ADMIN = "AGENCY_ADMIN"
+    ADMIN = "ADMIN"
     PLAYER = "PLAYER"
+    DEVELOPER = "DEVELOPER"  # Nouveaux rôles AIDEN
+    SUPPORT = "SUPPORT"
+    AI = "AI"
 
 class AgencyStatusEnum(enum.Enum):
     ACTIVE = "ACTIVE"

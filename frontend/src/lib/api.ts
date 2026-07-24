@@ -8,8 +8,9 @@ export type LoginResponse = {
   message: string;
   user_id: number;
   email: string;
-  role: "AGENCY_ADMIN" | "PLAYER" | "SUPER_ADMIN";
+  role: "SUPER_ADMIN" | "ADMIN" | "PLAYER" | "DEVELOPER" | "SUPPORT" | "AI";
   token: string;
+  tenant: string; // Ajout du tenant AIDEN (ex: "GLOBAL" ou "1")
 };
 
 type AdminHomeResponse = {

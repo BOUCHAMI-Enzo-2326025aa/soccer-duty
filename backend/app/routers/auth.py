@@ -20,11 +20,15 @@ def _login(credentials: schemas.UserLogin, db: Session):
     if not user or user.hashed_password != credentials.password:
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
 
+    # --- Logique AIDEN : conversion de l'agency_id en tenant (chaîne de caractères) ---
+    aiden_tenant = str(user.agency_id) if user.agency_id else "GLOBAL"
+
     return {
         "message": "Login successful",
         "user_id": user.id,
         "email": user.email,
         "role": user.role,
+        "tenant": aiden_tenant, # <-- Ajout du tenant ici !
         "token": f"fake_token_for_now_{user.id}",
     }
 

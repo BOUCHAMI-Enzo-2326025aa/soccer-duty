@@ -27,7 +27,7 @@ export default function LoginPage() {
       document.cookie = `user_id=${data.user_id}; path=/; max-age=86400`;
 
       // LA MAGIE OPÈRE ICI : Redirection selon le rôle !
-      if (data.role === "AGENCY_ADMIN") {
+      if (data.role === "ADMIN") {
         router.push("/admin");
       } else if (data.role === "PLAYER") {
         router.push("/joueur");

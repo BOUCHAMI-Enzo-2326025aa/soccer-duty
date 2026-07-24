@@ -32,7 +32,7 @@ def admin_players(admin_user_id: int | None = None, db: Session = Depends(get_db
         admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
         if (
             admin_user
-            and admin_user.role == models.RoleEnum.AGENCY_ADMIN
+            and admin_user.role == models.RoleEnum.ADMIN
             and admin_user.agency_id is not None
         ):
             query = query.filter(models.User.agency_id == admin_user.agency_id)
@@ -97,7 +97,7 @@ def update_admin_player(
     player_profile, player_user = row
 
     if (
-        admin_user.role == models.RoleEnum.AGENCY_ADMIN
+        admin_user.role == models.RoleEnum.ADMIN
         and admin_user.agency_id is not None
         and player_user.agency_id != admin_user.agency_id
     ):

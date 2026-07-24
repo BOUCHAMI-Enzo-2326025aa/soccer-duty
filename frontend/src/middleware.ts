@@ -16,7 +16,7 @@ export function middleware(request: NextRequest) {
   }
 
   // 3. RÈGLE N°2 : Un Joueur essaie d'aller sur l'espace Admin = Dehors
-  if (path.startsWith("/admin") && role !== "AGENCY_ADMIN") {
+  if (path.startsWith("/admin") && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
