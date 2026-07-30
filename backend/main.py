@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine
 from app.models import models
-from app.routers import admin, agencies, auth, documents, messages, notifications, player, universities, users
+from app.routers import admin, agencies, auth, documents, messages, notifications, player, universities, users, aiden_router
 
 # Création des tables (si elles n'existent pas déjà)
 models.Base.metadata.create_all(bind=engine)
@@ -39,3 +39,5 @@ app.include_router(notifications.router)
 # Dashboard routes mapped to front navbars.
 app.include_router(player.router)
 app.include_router(admin.router)
+
+app.include_router(aiden_router.router)

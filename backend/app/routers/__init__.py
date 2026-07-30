@@ -1,4 +1,4 @@
-from . import admin, agencies, auth, documents, messages, notifications, player, universities, users
+from . import admin, agencies, auth, documents, messages, notifications, player, universities, users, aiden_router
 
 __all__ = [
     "admin",
@@ -10,4 +10,5 @@ __all__ = [
     "player",
     "universities",
     "users",
+    "aiden_router",
 ]

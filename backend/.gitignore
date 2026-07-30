@@ -20,3 +20,8 @@ Thumbs.db
 *.sqlite3
 *.sql
 *.backup-*
+
+# Bases de données SQLite et fichiers temporaires
+*.db
+*.db-shm
+*.db-wal
