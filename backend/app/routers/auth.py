@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import models
 from app import schemas
-from app.aiden_bridge import AIDEN_COOKIE_NAME, get_aiden
+from app.aiden_bridge import AIDEN_COOKIE_NAME, AIDEN_REFRESH_COOKIE_NAME, get_aiden
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 legacy_router = APIRouter(tags=["auth"])
@@ -39,6 +39,13 @@ def _login(credentials: schemas.UserLogin, db: Session, response: Response):
             samesite="lax",
             # secure=True,  # à activer dès que le site tourne en HTTPS
         )
+        response.set_cookie(
+            key=AIDEN_REFRESH_COOKIE_NAME,
+            value=body["refresh"],
+            httponly=True,
+            samesite="lax",
+            # secure=True,  # à activer dès que le site tourne en HTTPS
+        )
 
     return {
         "message": "Login successful",
@@ -63,7 +70,8 @@ def legacy_login(credentials: schemas.UserLogin, response: Response, db: Session
 
 @router.post("/logout", response_model=LogoutResponse)
 def logout(response: Response):
-    response.delete_cookie("aiden_access")
+    response.delete_cookie(AIDEN_COOKIE_NAME)
+    response.delete_cookie(AIDEN_REFRESH_COOKIE_NAME)
     return {"message": "Logout successful"}
 
 

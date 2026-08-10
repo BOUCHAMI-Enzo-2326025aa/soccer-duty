@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
+import { logout } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 export default function AdminSidebar({
   isOpen,
@@ -12,14 +14,18 @@ export default function AdminSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter(); // <-- Initialisation du router
+  const { clearAuth } = useAuth();
 
-  // --- NOUVEAU : La fonction de déconnexion ---
-  const handleLogout = () => {
-    // On détruit les cookies
-    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  // --- La fonction de déconnexion ---
+  const handleLogout = async () => {
+    try {
+      // Efface côté serveur les cookies httpOnly AIDEN (inaccessibles en JS)
+      await logout();
+    } catch {
+      // On déconnecte quand même côté client si l'API est indisponible
+    }
 
-    // On renvoie à l'accueil
+    clearAuth();
     router.push("/");
   };
 

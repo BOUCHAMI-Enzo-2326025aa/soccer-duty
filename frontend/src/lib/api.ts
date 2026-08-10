@@ -96,6 +96,14 @@ export function getTokenFromCookie(): string | null {
   return getCookieValue("token");
 }
 
+export function getRoleFromCookie(): LoginResponse["role"] | null {
+  return getCookieValue("role") as LoginResponse["role"] | null;
+}
+
+export function getTenantFromCookie(): string | null {
+  return getCookieValue("tenant");
+}
+
 async function apiFetch<T>(
   path: string,
   options: ApiRequestOptions = {},
@@ -150,6 +158,48 @@ export async function login(email: string, password: string) {
     },
     body: JSON.stringify({ email, password }),
   });
+}
+
+export async function logout() {
+  return apiFetch<{ message: string }>("/auth/logout", {
+    auth: false,
+    method: "POST",
+  });
+}
+
+export type AidenOperation =
+  | "ai_generate"
+  | "context"
+  | "memory"
+  | "workflow"
+  | "notify"
+  | "ocr"
+  | "process_document"
+  | "review_action"
+  | "compose"
+  | "decide"
+  | "analytics"
+  | "product"
+  | "mission";
+
+// Appelle le proxy /aiden/{operation} du backend. La session AIDEN vit dans
+// des cookies httpOnly posés au login : pas de token à gérer ici, apiFetch
+// envoie déjà les cookies via credentials: "include".
+export async function callAiden<T = unknown>(
+  operation: AidenOperation,
+  payload: Record<string, unknown> = {},
+) {
+  return apiFetch<{ result: T; security_context_sig: string }>(
+    `/aiden/${operation}`,
+    {
+      auth: false,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ payload }),
+    },
+  );
 }
 
 export async function getAgencies() {

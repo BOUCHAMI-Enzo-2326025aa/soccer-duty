@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login as loginRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setAuth } = useAuth();
 
   // États pour stocker ce que l'utilisateur tape
   const [email, setEmail] = useState("");
@@ -21,10 +23,8 @@ export default function LoginPage() {
     try {
       const data = await loginRequest(email, password);
 
-      // --- On sauvegarde le badge dans les cookies (valable 1 jour) ---
-      document.cookie = `token=${data.token}; path=/; max-age=86400`;
-      document.cookie = `role=${data.role}; path=/; max-age=86400`;
-      document.cookie = `user_id=${data.user_id}; path=/; max-age=86400`;
+      // --- On sauvegarde la session (cookies + état global React) ---
+      setAuth(data);
 
       // LA MAGIE OPÈRE ICI : Redirection selon le rôle !
       if (data.role === "ADMIN") {

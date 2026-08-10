@@ -54,6 +54,10 @@ GLOBAL_TENANT = "GLOBAL"
 # Nom du cookie qui portera le token d'accès AIDEN (posé au login, voir auth.py)
 AIDEN_COOKIE_NAME = "aiden_access"
 
+# Nom du cookie qui portera le refresh token AIDEN, utilisé pour réémettre un
+# access token sans repasser par le login (voir routers/aiden_router.py).
+AIDEN_REFRESH_COOKIE_NAME = "aiden_refresh"
+
 
 _app: AidenApp | None = None
 

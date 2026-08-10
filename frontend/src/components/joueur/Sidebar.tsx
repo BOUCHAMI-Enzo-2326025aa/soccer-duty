@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
+import { logout } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 export default function Sidebar({
   isOpen,
@@ -12,6 +14,7 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter(); // <-- Initialisation du router
+  const { clearAuth } = useAuth();
 
   const navItems = [
     { name: "Mon Dossier", icon: "📂", path: "/joueur" },
@@ -21,13 +24,16 @@ export default function Sidebar({
     { name: "Aide", icon: "❓", path: "/joueur/aide" },
   ];
 
-  // --- NOUVEAU : La fonction de déconnexion ---
-  const handleLogout = () => {
-    // 1. On "détruit" les cookies en mettant leur date d'expiration dans le passé (1970)
-    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  // --- La fonction de déconnexion ---
+  const handleLogout = async () => {
+    try {
+      // Efface côté serveur les cookies httpOnly AIDEN (inaccessibles en JS)
+      await logout();
+    } catch {
+      // On déconnecte quand même côté client si l'API est indisponible
+    }
 
-    // 2. On renvoie l'utilisateur sur la page de Login
+    clearAuth();
     router.push("/");
   };
 
