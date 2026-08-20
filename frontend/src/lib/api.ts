@@ -212,8 +212,43 @@ export async function getAdminHome() {
   return apiFetch<AdminHomeResponse>("/admin/accueil");
 }
 
+export type University = {
+  id: number;
+  name: string;
+  logo: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  division: string | null;
+  website: string | null;
+  conference: string | null;
+  contact_email: string | null;
+};
+
+export type CreateUniversityPayload = {
+  name: string;
+  logo: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  division: string | null;
+  website: string | null;
+  conference: string | null;
+  contact_email: string | null;
+};
+
 export async function getAdminUniversities() {
-  return apiFetch<ListResponse<{ id: number }>>("/admin/universites");
+  return apiFetch<ListResponse<University>>("/admin/universites");
+}
+
+export async function createUniversity(payload: CreateUniversityPayload) {
+  return apiFetch<University>("/universities/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getAdminTodo() {
