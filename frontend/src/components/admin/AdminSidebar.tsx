@@ -1,8 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
-import { logout } from "@/lib/api";
+import {
+  getAdminPlayers,
+  getAdminUniversities,
+  getUserIdFromCookie,
+  logout,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export default function AdminSidebar({
@@ -15,6 +21,31 @@ export default function AdminSidebar({
   const pathname = usePathname();
   const router = useRouter(); // <-- Initialisation du router
   const { clearAuth } = useAuth();
+
+  const [counts, setCounts] = useState<{
+    players: number | null;
+    universities: number | null;
+  }>({ players: null, universities: null });
+
+  useEffect(() => {
+    const loadCounts = async () => {
+      try {
+        const userId = getUserIdFromCookie();
+        const [playersResponse, universitiesResponse] = await Promise.all([
+          getAdminPlayers(userId ?? undefined),
+          getAdminUniversities(),
+        ]);
+        setCounts({
+          players: playersResponse.count,
+          universities: universitiesResponse.count,
+        });
+      } catch {
+        // Garde les badges vides si l'API est indisponible ; la sidebar reste utilisable.
+      }
+    };
+
+    loadCounts();
+  }, []);
 
   // --- La fonction de déconnexion ---
   const handleLogout = async () => {
@@ -87,7 +118,7 @@ export default function AdminSidebar({
               <span className="text-base w-5 text-center shrink-0">👤</span>
               Joueurs
               <span className="ml-auto bg-orange-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
-                52
+                {counts.players ?? "…"}
               </span>
             </Link>
 
@@ -101,7 +132,7 @@ export default function AdminSidebar({
               <span className="text-base w-5 text-center shrink-0">🎓</span>
               Universités
               <span className="ml-auto bg-blue-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
-                31
+                {counts.universities ?? "…"}
               </span>
             </Link>
 

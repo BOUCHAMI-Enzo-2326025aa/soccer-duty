@@ -12,6 +12,12 @@ class UniversityCreate(BaseModel):
     name: str
     state: str | None = None
     division: str | None = None
+    logo: str | None = None
+    address: str | None = None
+    city: str | None = None
+    website: str | None = None
+    conference: str | None = None
+    contact_email: str | None = None
 
 
 @router.post("/")
@@ -20,6 +26,12 @@ def create_university(payload: UniversityCreate, db: Session = Depends(get_db)):
         name=payload.name,
         state=payload.state,
         division=payload.division,
+        logo=payload.logo,
+        address=payload.address,
+        city=payload.city,
+        website=payload.website,
+        conference=payload.conference,
+        contact_email=payload.contact_email,
     )
     db.add(item)
     db.commit()

@@ -76,6 +76,12 @@ class University(Base):
     name = Column(String, nullable=False)
     state = Column(String)
     division = Column(String) # ex: NCAA D1, NJCAA
+    logo = Column(String, nullable=True) # URL de l'image
+    address = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    conference = Column(String, nullable=True) # ex: SEC, Big Ten, ACC
+    contact_email = Column(String, nullable=True)
 
 class PlayerProfile(Base):
     __tablename__ = "player_profiles"
