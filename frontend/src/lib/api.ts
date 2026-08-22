@@ -1,5 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000" || "http://localhost:8000";
 
+export function getApiFileUrl(path: string): string {
+  return `${API_URL}${path}`;
+}
+
 type ApiRequestOptions = RequestInit & {
   auth?: boolean;
 };
@@ -251,6 +255,92 @@ export async function createUniversity(payload: CreateUniversityPayload) {
   });
 }
 
+export type DocumentCategory =
+  | "IDENTITE"
+  | "ACADEMIQUE"
+  | "MEDICAL"
+  | "VISA"
+  | "SPORT"
+  | "FINANCIER";
+
+export type DocumentApplicationScope = "GENERIC" | "SPECIFIC";
+
+export type DocumentTemplate = {
+  id: number;
+  agency_id: number | null;
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+  delay_total_days: number | null;
+  target_universities: Array<{ id: number; name: string }>;
+};
+
+export type SaveDocumentTemplatePayload = {
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  target_university_ids: number[];
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+};
+
+export async function getAdminDocumentTemplates(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<ListResponse<DocumentTemplate>>(`/admin/documents${query}`);
+}
+
+export async function createDocumentTemplate(
+  payload: SaveDocumentTemplatePayload,
+  adminUserId: number,
+) {
+  return apiFetch<DocumentTemplate>(
+    `/admin/documents?admin_user_id=${adminUserId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateDocumentTemplate(
+  templateId: number,
+  payload: SaveDocumentTemplatePayload,
+  adminUserId: number,
+) {
+  return apiFetch<DocumentTemplate>(
+    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteDocumentTemplate(
+  templateId: number,
+  adminUserId: number,
+) {
+  return apiFetch<{ message: string }>(
+    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function getAdminTodo() {
   return apiFetch<{
     pending_documents: Array<{ id: number }>;
@@ -304,4 +394,56 @@ export async function getPlayerDossier(userId: number) {
     }>;
     milestones: Array<{ id: number; name: string; status: string }>;
   }>(`/player/dossier/${userId}`);
+}
+
+export type PlayerDocumentStatus =
+  | "MISSING"
+  | "PENDING"
+  | "VALIDATED"
+  | "REJECTED";
+
+export type PlayerDocumentItem = {
+  document_template_id: number;
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+  delay_total_days: number | null;
+  document_id: number | null;
+  status: PlayerDocumentStatus;
+  file_url: string | null;
+  updated_at: string | null;
+};
+
+export async function getPlayerDocuments(userId: number) {
+  return apiFetch<ListResponse<PlayerDocumentItem>>(
+    `/player/documents/${userId}`,
+  );
+}
+
+export async function uploadPlayerDocument(
+  userId: number,
+  documentTemplateId: number,
+  file: File,
+) {
+  const formData = new FormData();
+  formData.append("user_id", String(userId));
+  formData.append("document_template_id", String(documentTemplateId));
+  formData.append("file", file);
+
+  return apiFetch<{
+    id: number;
+    player_id: number;
+    document_template_id: number;
+    status: PlayerDocumentStatus;
+    s3_url: string | null;
+  }>("/documents/upload", {
+    method: "POST",
+    body: formData,
+  });
 }

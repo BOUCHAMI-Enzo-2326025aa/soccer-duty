@@ -148,6 +148,181 @@ def admin_universities(db: Session = Depends(get_db)):
     return {"count": len(universities), "items": universities}
 
 
+def _serialize_document_template(template: models.DocumentTemplate) -> dict:
+    delays = [
+        template.delay_appointment_days,
+        template.delay_completion_days,
+        template.delay_processing_days,
+    ]
+    delay_total_days = (
+        sum(delay or 0 for delay in delays) if any(delay is not None for delay in delays) else None
+    )
+
+    return {
+        "id": template.id,
+        "agency_id": template.agency_id,
+        "name": template.name,
+        "category": template.category,
+        "is_required_by_default": template.is_required_by_default,
+        "description_for_player": template.description_for_player,
+        "external_url": template.external_url,
+        "application_scope": template.application_scope,
+        "delay_appointment_days": template.delay_appointment_days,
+        "delay_completion_days": template.delay_completion_days,
+        "delay_processing_days": template.delay_processing_days,
+        "delay_total_days": delay_total_days,
+        "target_universities": [
+            {"id": university.id, "name": university.name}
+            for university in template.target_universities
+        ],
+    }
+
+
+def _get_admin_user_or_404(admin_user_id: int, db: Session) -> models.User:
+    admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
+    if not admin_user:
+        raise HTTPException(status_code=404, detail="Admin user not found")
+    return admin_user
+
+
+def _assert_document_template_in_scope(
+    admin_user: models.User, template: models.DocumentTemplate
+) -> None:
+    if (
+        admin_user.role == models.RoleEnum.ADMIN
+        and admin_user.agency_id is not None
+        and template.agency_id is not None
+        and template.agency_id != admin_user.agency_id
+    ):
+        raise HTTPException(status_code=403, detail="Document template is outside your agency")
+
+
+def _resolve_target_universities(
+    university_ids: list[int], db: Session
+) -> list[models.University]:
+    if not university_ids:
+        return []
+
+    found = (
+        db.query(models.University)
+        .filter(models.University.id.in_(university_ids))
+        .all()
+    )
+    if len(found) != len(set(university_ids)):
+        raise HTTPException(status_code=404, detail="One or more universities not found")
+    return found
+
+
+@router.get("/documents")
+def admin_document_templates(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(models.DocumentTemplate)
+
+    if admin_user_id is not None:
+        admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
+        if (
+            admin_user
+            and admin_user.role == models.RoleEnum.ADMIN
+            and admin_user.agency_id is not None
+        ):
+            query = query.filter(
+                (models.DocumentTemplate.agency_id == admin_user.agency_id)
+                | (models.DocumentTemplate.agency_id.is_(None))
+            )
+
+    templates = query.order_by(models.DocumentTemplate.id).all()
+    items = [_serialize_document_template(template) for template in templates]
+    return {"count": len(items), "items": items}
+
+
+@router.post("/documents")
+def create_admin_document_template(
+    payload: schemas.AdminDocumentTemplateSave,
+    admin_user_id: int,
+    db: Session = Depends(get_db),
+):
+    admin_user = _get_admin_user_or_404(admin_user_id, db)
+    target_universities = _resolve_target_universities(payload.target_university_ids, db)
+
+    template = models.DocumentTemplate(
+        agency_id=admin_user.agency_id,
+        name=payload.name,
+        category=payload.category,
+        description_for_player=payload.description_for_player,
+        is_required_by_default=payload.is_required_by_default,
+        external_url=payload.external_url,
+        application_scope=payload.application_scope,
+        delay_appointment_days=payload.delay_appointment_days,
+        delay_completion_days=payload.delay_completion_days,
+        delay_processing_days=payload.delay_processing_days,
+    )
+    template.target_universities = target_universities
+
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return _serialize_document_template(template)
+
+
+@router.patch("/documents/{template_id}")
+def update_admin_document_template(
+    template_id: int,
+    payload: schemas.AdminDocumentTemplateSave,
+    admin_user_id: int,
+    db: Session = Depends(get_db),
+):
+    admin_user = _get_admin_user_or_404(admin_user_id, db)
+
+    template = (
+        db.query(models.DocumentTemplate)
+        .filter(models.DocumentTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Document template not found")
+
+    _assert_document_template_in_scope(admin_user, template)
+    target_universities = _resolve_target_universities(payload.target_university_ids, db)
+
+    template.name = payload.name
+    template.category = payload.category
+    template.description_for_player = payload.description_for_player
+    template.is_required_by_default = payload.is_required_by_default
+    template.external_url = payload.external_url
+    template.application_scope = payload.application_scope
+    template.delay_appointment_days = payload.delay_appointment_days
+    template.delay_completion_days = payload.delay_completion_days
+    template.delay_processing_days = payload.delay_processing_days
+    template.target_universities = target_universities
+
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return _serialize_document_template(template)
+
+
+@router.delete("/documents/{template_id}")
+def delete_admin_document_template(
+    template_id: int,
+    admin_user_id: int,
+    db: Session = Depends(get_db),
+):
+    admin_user = _get_admin_user_or_404(admin_user_id, db)
+
+    template = (
+        db.query(models.DocumentTemplate)
+        .filter(models.DocumentTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Document template not found")
+
+    _assert_document_template_in_scope(admin_user, template)
+
+    db.delete(template)
+    db.commit()
+    return {"message": "Document template deleted"}
+
+
 @router.get("/todo")
 def admin_todo(db: Session = Depends(get_db)):
     pending_documents = (

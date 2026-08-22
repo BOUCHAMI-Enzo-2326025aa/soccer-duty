@@ -22,11 +22,16 @@ class AgencyStatusEnum(enum.Enum):
     SUSPENDED = "SUSPENDED"
 
 class DocCategoryEnum(enum.Enum):
+    IDENTITE = "IDENTITE"
     ACADEMIQUE = "ACADEMIQUE"
-    SPORTIF = "SPORTIF"
-    IMMIGRATION = "IMMIGRATION"
-    FINANCIER = "FINANCIER"
     MEDICAL = "MEDICAL"
+    VISA = "VISA"
+    SPORT = "SPORT"
+    FINANCIER = "FINANCIER"
+
+class ApplicationScopeEnum(enum.Enum):
+    GENERIC = "GENERIC"  # Demandé par la majorité des universités
+    SPECIFIC = "SPECIFIC"  # Propre à une sélection d'universités
 
 class DocStatusEnum(enum.Enum):
     MISSING = "MISSING"
@@ -115,11 +120,28 @@ class DocumentTemplate(Base):
     agency_id = Column(Integer, ForeignKey("agencies.id"), nullable=True) # Null = Template global SportPath
     name = Column(String, nullable=False) # ex: "Passeport"
     category = Column(Enum(DocCategoryEnum), nullable=False)
-    description_for_player = Column(Text, nullable=True)
+    description_for_player = Column(Text, nullable=True) # Tutoriel affiché au joueur
     is_required_by_default = Column(Boolean, default=True)
     ai_validation_rules = Column(JSON, nullable=True) # Règles spécifiques pour ton IA
+    external_url = Column(String, nullable=True) # Lien vers le service tiers (ambassade, NCAA...)
+    application_scope = Column(
+        Enum(ApplicationScopeEnum), default=ApplicationScopeEnum.GENERIC, nullable=False
+    )
+    delay_appointment_days = Column(Integer, nullable=True) # Délai de prise de rendez-vous
+    delay_completion_days = Column(Integer, nullable=True) # Délai de complétion par le joueur
+    delay_processing_days = Column(Integer, nullable=True) # Délai de traitement externe
 
     agency = relationship("Agency", back_populates="document_templates")
+    target_universities = relationship(
+        "University", secondary="document_template_universities"
+    )
+
+class DocumentTemplateUniversity(Base):
+    __tablename__ = "document_template_universities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_template_id = Column(Integer, ForeignKey("document_templates.id"), nullable=False)
+    university_id = Column(Integer, ForeignKey("universities.id"), nullable=False)
 
 class Document(Base):
     __tablename__ = "documents"

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function AdminTopBar({
   openSidebar,
   title = "ACCUEIL",
@@ -32,10 +34,13 @@ export default function AdminTopBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <button className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors">
+        <Link
+          href="/admin/documents"
+          className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors"
+        >
           📄
           <div className="absolute top-1 right-1 w-[7px] h-[7px] bg-orange-custom rounded-full border-2 border-white"></div>
-        </button>
+        </Link>
         <button className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors">
           💬
           <div className="absolute top-1 right-1 w-[7px] h-[7px] bg-orange-custom rounded-full border-2 border-white"></div>

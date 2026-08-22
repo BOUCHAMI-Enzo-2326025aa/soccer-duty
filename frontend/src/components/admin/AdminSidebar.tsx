@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
 import {
+  getAdminDocumentTemplates,
   getAdminPlayers,
   getAdminUniversities,
   getUserIdFromCookie,
@@ -25,19 +26,23 @@ export default function AdminSidebar({
   const [counts, setCounts] = useState<{
     players: number | null;
     universities: number | null;
-  }>({ players: null, universities: null });
+    documents: number | null;
+  }>({ players: null, universities: null, documents: null });
 
   useEffect(() => {
     const loadCounts = async () => {
       try {
         const userId = getUserIdFromCookie();
-        const [playersResponse, universitiesResponse] = await Promise.all([
-          getAdminPlayers(userId ?? undefined),
-          getAdminUniversities(),
-        ]);
+        const [playersResponse, universitiesResponse, documentsResponse] =
+          await Promise.all([
+            getAdminPlayers(userId ?? undefined),
+            getAdminUniversities(),
+            getAdminDocumentTemplates(userId ?? undefined),
+          ]);
         setCounts({
           players: playersResponse.count,
           universities: universitiesResponse.count,
+          documents: documentsResponse.count,
         });
       } catch {
         // Garde les badges vides si l'API est indisponible ; la sidebar reste utilisable.
@@ -133,6 +138,20 @@ export default function AdminSidebar({
               Universités
               <span className="ml-auto bg-blue-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
                 {counts.universities ?? "…"}
+              </span>
+            </Link>
+
+            <Link
+              href="/admin/documents"
+              className={`flex items-center gap-2.5 px-4 py-[11px] cursor-pointer text-[13.5px] font-medium transition-all relative ${pathname.startsWith("/admin/documents") ? "text-white bg-green-custom/10" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+            >
+              {pathname.startsWith("/admin/documents") && (
+                <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-green-custom rounded-r-sm"></div>
+              )}
+              <span className="text-base w-5 text-center shrink-0">📄</span>
+              Documents
+              <span className="ml-auto bg-blue-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
+                {counts.documents ?? "…"}
               </span>
             </Link>
 
