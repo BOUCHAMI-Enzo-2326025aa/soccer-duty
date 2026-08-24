@@ -1,7 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
-from app.models.models import RoleEnum, DocCategoryEnum
+from app.models.models import RoleEnum, DocCategoryEnum, ApplicationScopeEnum
 
 # ==========================================
 # AGENCIES (Ce que tu as déjà)
@@ -52,6 +52,19 @@ class DocumentTemplateResponse(BaseModel):
     is_required_by_default: bool
     ai_validation_rules: Optional[Dict[str, Any]]
     model_config = {"from_attributes": True}
+
+
+class AdminDocumentTemplateSave(BaseModel):
+    name: str
+    category: DocCategoryEnum
+    is_required_by_default: bool = True
+    description_for_player: Optional[str] = None  # Tutoriel affiché au joueur
+    external_url: Optional[str] = None
+    application_scope: ApplicationScopeEnum = ApplicationScopeEnum.GENERIC
+    target_university_ids: List[int] = []
+    delay_appointment_days: Optional[int] = None
+    delay_completion_days: Optional[int] = None
+    delay_processing_days: Optional[int] = None
 
 class UserLogin(BaseModel):
     email: str

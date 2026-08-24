@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
-import { logout } from "@/lib/api";
+import { getPlayerNotifications, getUserIdFromCookie, logout } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Sidebar({
@@ -16,10 +17,41 @@ export default function Sidebar({
   const router = useRouter(); // <-- Initialisation du router
   const { clearAuth } = useAuth();
 
-  const navItems = [
+  const [unreadNotifications, setUnreadNotifications] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const userId = getUserIdFromCookie();
+        if (!userId) return;
+        const response = await getPlayerNotifications(userId);
+        setUnreadNotifications(
+          response.items.filter((n) => !n.is_read).length,
+        );
+      } catch {
+        // Garde le badge vide si l'API est indisponible ; la sidebar reste utilisable.
+      }
+    };
+
+    loadUnreadCount();
+  }, []);
+
+  const navItems: Array<{
+    name: string;
+    icon: string;
+    path: string;
+    badge?: number | null;
+  }> = [
     { name: "Mon Dossier", icon: "📂", path: "/joueur" },
     { name: "Mon Profil", icon: "👤", path: "/joueur/profil" },
-    { name: "Documents", icon: "📄", path: "/joueur/documents" },
+    {
+      name: "Notifications",
+      icon: "🔔",
+      path: "/joueur/notifications",
+      badge: unreadNotifications,
+    },
     { name: "Messagerie", icon: "💬", path: "/joueur/messages" },
     { name: "Aide", icon: "❓", path: "/joueur/aide" },
   ];
@@ -88,6 +120,11 @@ export default function Sidebar({
                     {item.icon}
                   </span>
                   {item.name}
+                  {!!item.badge && (
+                    <span className="ml-auto bg-orange-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

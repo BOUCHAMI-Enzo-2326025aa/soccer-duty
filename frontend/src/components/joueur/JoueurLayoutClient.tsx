@@ -4,6 +4,7 @@ import { useState } from "react";
 import Sidebar from "@/components/joueur/Sidebar";
 import BottomNav from "@/components/joueur/BottomNav";
 import TopBanner from "@/components/joueur/TopBanner";
+import { PlayerDocumentsProvider } from "@/lib/player-documents-context";
 
 export default function JoueurLayoutClient({
   children,
@@ -13,7 +14,7 @@ export default function JoueurLayoutClient({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <>
+    <PlayerDocumentsProvider>
       <Sidebar
         isOpen={sidebarOpen}
         closeSidebar={() => setSidebarOpen(false)}
@@ -23,6 +24,6 @@ export default function JoueurLayoutClient({
         <main className="p-4 md:p-5 flex-1 max-w-full">{children}</main>
       </div>
       <BottomNav openSidebar={() => setSidebarOpen(true)} />
-    </>
+    </PlayerDocumentsProvider>
   );
 }

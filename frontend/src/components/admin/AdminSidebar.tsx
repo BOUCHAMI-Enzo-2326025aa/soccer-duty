@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // <-- Ajout de useRouter
 import {
+  getAdminDocumentTemplates,
+  getAdminNotifications,
   getAdminPlayers,
+  getAdminTodo,
   getAdminUniversities,
   getUserIdFromCookie,
   logout,
@@ -25,19 +28,42 @@ export default function AdminSidebar({
   const [counts, setCounts] = useState<{
     players: number | null;
     universities: number | null;
-  }>({ players: null, universities: null });
+    documents: number | null;
+    todo: number | null;
+    notifications: number | null;
+  }>({
+    players: null,
+    universities: null,
+    documents: null,
+    todo: null,
+    notifications: null,
+  });
 
   useEffect(() => {
     const loadCounts = async () => {
       try {
         const userId = getUserIdFromCookie();
-        const [playersResponse, universitiesResponse] = await Promise.all([
+        const [
+          playersResponse,
+          universitiesResponse,
+          documentsResponse,
+          todoResponse,
+          notificationsResponse,
+        ] = await Promise.all([
           getAdminPlayers(userId ?? undefined),
           getAdminUniversities(),
+          getAdminDocumentTemplates(userId ?? undefined),
+          getAdminTodo(userId ?? undefined),
+          getAdminNotifications(userId ?? undefined),
         ]);
         setCounts({
           players: playersResponse.count,
           universities: universitiesResponse.count,
+          documents: documentsResponse.count,
+          todo: todoResponse.pending_documents.length,
+          notifications: notificationsResponse.items.filter(
+            (n) => !n.is_read,
+          ).length,
         });
       } catch {
         // Garde les badges vides si l'API est indisponible ; la sidebar reste utilisable.
@@ -136,6 +162,20 @@ export default function AdminSidebar({
               </span>
             </Link>
 
+            <Link
+              href="/admin/documents"
+              className={`flex items-center gap-2.5 px-4 py-[11px] cursor-pointer text-[13.5px] font-medium transition-all relative ${pathname.startsWith("/admin/documents") ? "text-white bg-green-custom/10" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+            >
+              {pathname.startsWith("/admin/documents") && (
+                <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-green-custom rounded-r-sm"></div>
+              )}
+              <span className="text-base w-5 text-center shrink-0">📄</span>
+              Documents
+              <span className="ml-auto bg-blue-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
+                {counts.documents ?? "…"}
+              </span>
+            </Link>
+
             <div className="text-white/25 text-[10px] font-semibold tracking-[1px] uppercase px-4 pt-3 pb-1">
               Suivi
             </div>
@@ -150,7 +190,7 @@ export default function AdminSidebar({
               <span className="text-base w-5 text-center shrink-0">✅</span>
               To-Do List
               <span className="ml-auto bg-orange-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
-                9
+                {counts.todo ?? "…"}
               </span>
             </Link>
 
@@ -158,10 +198,13 @@ export default function AdminSidebar({
               href="/admin/notifications"
               className={`flex items-center gap-2.5 px-4 py-[11px] cursor-pointer text-[13.5px] font-medium transition-all relative ${pathname.startsWith("/admin/notifications") ? "text-white bg-green-custom/10" : "text-white/60 hover:text-white hover:bg-white/5"}`}
             >
+              {pathname.startsWith("/admin/notifications") && (
+                <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-green-custom rounded-r-sm"></div>
+              )}
               <span className="text-base w-5 text-center shrink-0">🔔</span>
               Notifications
               <span className="ml-auto bg-orange-custom text-white text-[10px] font-bold px-[7px] py-[1px] rounded-full">
-                27
+                {counts.notifications ?? "…"}
               </span>
             </Link>
 

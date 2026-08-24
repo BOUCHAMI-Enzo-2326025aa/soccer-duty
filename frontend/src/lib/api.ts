@@ -1,5 +1,9 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000" || "http://localhost:8000";
 
+export function getApiFileUrl(path: string): string {
+  return `${API_URL}${path}`;
+}
+
 type ApiRequestOptions = RequestInit & {
   auth?: boolean;
 };
@@ -45,6 +49,11 @@ export type AdminPlayer = {
     | "Bouche à oreille"
     | "Formulaire";
   intake_period: "Spring" | "Fall";
+  pending_documents_count: number;
+  documents_total: number;
+  documents_validated: number;
+  documents_pending: number;
+  progress_percentage_real: number;
 };
 
 export type UpdateAdminPlayerPayload = {
@@ -251,13 +260,113 @@ export async function createUniversity(payload: CreateUniversityPayload) {
   });
 }
 
-export async function getAdminTodo() {
+export type DocumentCategory =
+  | "IDENTITE"
+  | "ACADEMIQUE"
+  | "MEDICAL"
+  | "VISA"
+  | "SPORT"
+  | "FINANCIER";
+
+export type DocumentApplicationScope = "GENERIC" | "SPECIFIC";
+
+export type DocumentTemplate = {
+  id: number;
+  agency_id: number | null;
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+  delay_total_days: number | null;
+  target_universities: Array<{ id: number; name: string }>;
+};
+
+export type SaveDocumentTemplatePayload = {
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  target_university_ids: number[];
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+};
+
+export async function getAdminDocumentTemplates(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<ListResponse<DocumentTemplate>>(`/admin/documents${query}`);
+}
+
+export async function createDocumentTemplate(
+  payload: SaveDocumentTemplatePayload,
+  adminUserId: number,
+) {
+  return apiFetch<DocumentTemplate>(
+    `/admin/documents?admin_user_id=${adminUserId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateDocumentTemplate(
+  templateId: number,
+  payload: SaveDocumentTemplatePayload,
+  adminUserId: number,
+) {
+  return apiFetch<DocumentTemplate>(
+    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteDocumentTemplate(
+  templateId: number,
+  adminUserId: number,
+) {
+  return apiFetch<{ message: string }>(
+    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
+    { method: "DELETE" },
+  );
+}
+
+export type AdminPendingDocument = {
+  document_id: number;
+  player_id: number;
+  player_name: string;
+  document_template_id: number;
+  document_name: string;
+  category: DocumentCategory;
+  submitted_at: string | null;
+};
+
+export async function getAdminTodo(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
   return apiFetch<{
-    pending_documents: Array<{ id: number }>;
+    pending_documents: AdminPendingDocument[];
     upcoming_milestones: Array<{ id: number }>;
     rejected_documents: Array<{ id: number }>;
     ready_players: Array<{ id: number }>;
-  }>("/admin/todo");
+  }>(`/admin/todo${query}`);
 }
 
 export async function getAdminPlayers(adminUserId?: number | null) {
@@ -266,6 +375,12 @@ export async function getAdminPlayers(adminUserId?: number | null) {
       ? `?admin_user_id=${adminUserId}`
       : "";
   return apiFetch<ListResponse<AdminPlayer>>(`/admin/joueurs${query}`);
+}
+
+export async function getAdminPlayerDocuments(playerId: number) {
+  return apiFetch<ListResponse<PlayerDocumentItem>>(
+    `/admin/joueurs/${playerId}/documents`,
+  );
 }
 
 export async function updateAdminPlayer(
@@ -285,8 +400,105 @@ export async function updateAdminPlayer(
   );
 }
 
-export async function getAdminNotifications() {
-  return apiFetch<ListResponse<{ id: number }>>("/admin/notifications");
+export type AdminNotification = {
+  id: number;
+  title: string;
+  content: string;
+  is_read: boolean;
+  created_at: string | null;
+  related_document_id: number | null;
+};
+
+export async function getAdminNotifications(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<ListResponse<AdminNotification>>(
+    `/admin/notifications${query}`,
+  );
+}
+
+export type PlayerNotification = AdminNotification;
+
+export async function getPlayerNotifications(userId: number) {
+  return apiFetch<ListResponse<PlayerNotification>>(
+    `/player/notifications/${userId}`,
+  );
+}
+
+export async function markNotificationRead(notificationId: number) {
+  return apiFetch<PlayerNotification>(
+    `/notifications/${notificationId}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markNotificationUnread(notificationId: number) {
+  return apiFetch<PlayerNotification>(
+    `/notifications/${notificationId}/unread`,
+    { method: "PATCH" },
+  );
+}
+
+export type PlayerProfileResponse = {
+  profile: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    date_of_birth: string | null;
+    university_id: number | null;
+  };
+  university: { id: number; name: string } | null;
+};
+
+export async function getPlayerProfile(userId: number) {
+  return apiFetch<PlayerProfileResponse>(`/player/profil/${userId}`);
+}
+
+export type DocumentReviewStatus = "VALIDATED" | "REJECTED";
+
+export type DocumentReviewDetail = {
+  document_id: number;
+  status: PlayerDocumentStatus;
+  file_url: string | null;
+  admin_comment: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  submitted_at: string | null;
+  player_id: number;
+  player_name: string;
+  document_template_id: number;
+  document_name: string;
+  category: DocumentCategory;
+  description_for_player: string | null;
+  external_url: string | null;
+};
+
+export async function getDocumentReview(
+  documentId: number,
+  adminUserId?: number | null,
+) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<DocumentReviewDetail>(`/documents/${documentId}${query}`);
+}
+
+export async function reviewDocument(
+  documentId: number,
+  payload: { status: DocumentReviewStatus; admin_comment: string | null },
+  adminUserId: number,
+) {
+  return apiFetch<DocumentReviewDetail>(
+    `/documents/${documentId}/review?admin_user_id=${adminUserId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function getPlayerDossier(userId: number) {
@@ -304,4 +516,57 @@ export async function getPlayerDossier(userId: number) {
     }>;
     milestones: Array<{ id: number; name: string; status: string }>;
   }>(`/player/dossier/${userId}`);
+}
+
+export type PlayerDocumentStatus =
+  | "MISSING"
+  | "PENDING"
+  | "VALIDATED"
+  | "REJECTED";
+
+export type PlayerDocumentItem = {
+  document_template_id: number;
+  name: string;
+  category: DocumentCategory;
+  is_required_by_default: boolean;
+  description_for_player: string | null;
+  external_url: string | null;
+  application_scope: DocumentApplicationScope;
+  delay_appointment_days: number | null;
+  delay_completion_days: number | null;
+  delay_processing_days: number | null;
+  delay_total_days: number | null;
+  document_id: number | null;
+  status: PlayerDocumentStatus;
+  file_url: string | null;
+  admin_comment: string | null;
+  updated_at: string | null;
+};
+
+export async function getPlayerDocuments(userId: number) {
+  return apiFetch<ListResponse<PlayerDocumentItem>>(
+    `/player/documents/${userId}`,
+  );
+}
+
+export async function uploadPlayerDocument(
+  userId: number,
+  documentTemplateId: number,
+  file: File,
+) {
+  const formData = new FormData();
+  formData.append("user_id", String(userId));
+  formData.append("document_template_id", String(documentTemplateId));
+  formData.append("file", file);
+
+  return apiFetch<{
+    id: number;
+    player_id: number;
+    document_template_id: number;
+    status: PlayerDocumentStatus;
+    s3_url: string | null;
+  }>("/documents/upload", {
+    method: "POST",
+    body: formData,
+  });
 }

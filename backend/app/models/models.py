@@ -22,11 +22,16 @@ class AgencyStatusEnum(enum.Enum):
     SUSPENDED = "SUSPENDED"
 
 class DocCategoryEnum(enum.Enum):
+    IDENTITE = "IDENTITE"
     ACADEMIQUE = "ACADEMIQUE"
-    SPORTIF = "SPORTIF"
-    IMMIGRATION = "IMMIGRATION"
-    FINANCIER = "FINANCIER"
     MEDICAL = "MEDICAL"
+    VISA = "VISA"
+    SPORT = "SPORT"
+    FINANCIER = "FINANCIER"
+
+class ApplicationScopeEnum(enum.Enum):
+    GENERIC = "GENERIC"  # Demandé par la majorité des universités
+    SPECIFIC = "SPECIFIC"  # Propre à une sélection d'universités
 
 class DocStatusEnum(enum.Enum):
     MISSING = "MISSING"
@@ -115,11 +120,28 @@ class DocumentTemplate(Base):
     agency_id = Column(Integer, ForeignKey("agencies.id"), nullable=True) # Null = Template global SportPath
     name = Column(String, nullable=False) # ex: "Passeport"
     category = Column(Enum(DocCategoryEnum), nullable=False)
-    description_for_player = Column(Text, nullable=True)
+    description_for_player = Column(Text, nullable=True) # Tutoriel affiché au joueur
     is_required_by_default = Column(Boolean, default=True)
     ai_validation_rules = Column(JSON, nullable=True) # Règles spécifiques pour ton IA
+    external_url = Column(String, nullable=True) # Lien vers le service tiers (ambassade, NCAA...)
+    application_scope = Column(
+        Enum(ApplicationScopeEnum), default=ApplicationScopeEnum.GENERIC, nullable=False
+    )
+    delay_appointment_days = Column(Integer, nullable=True) # Délai de prise de rendez-vous
+    delay_completion_days = Column(Integer, nullable=True) # Délai de complétion par le joueur
+    delay_processing_days = Column(Integer, nullable=True) # Délai de traitement externe
 
     agency = relationship("Agency", back_populates="document_templates")
+    target_universities = relationship(
+        "University", secondary="document_template_universities"
+    )
+
+class DocumentTemplateUniversity(Base):
+    __tablename__ = "document_template_universities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_template_id = Column(Integer, ForeignKey("document_templates.id"), nullable=False)
+    university_id = Column(Integer, ForeignKey("universities.id"), nullable=False)
 
 class Document(Base):
     __tablename__ = "documents"
@@ -131,6 +153,9 @@ class Document(Base):
     s3_url = Column(String, nullable=True)
     ai_analysis_result = Column(JSON, nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    admin_comment = Column(Text, nullable=True) # Commentaire visible par le joueur
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
     player = relationship("PlayerProfile", back_populates="documents")
     template = relationship("DocumentTemplate")
@@ -212,6 +237,7 @@ class Notification(Base):
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    related_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
 
 class ActivityLog(Base):
     __tablename__ = "activity_logs"

@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   getAdminPlayers,
+  getAdminTodo,
   getUserIdFromCookie,
   updateAdminPlayer,
+  type AdminPendingDocument,
   type AdminPlayer,
 } from "@/lib/api";
+import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
 
 type DossierOption = "Trad" | "Eval" | "Done";
 type StatutOption =
@@ -98,43 +101,57 @@ export default function AdminPlayersPage() {
   const [selections, setSelections] = useState<Record<number, RowSelection>>({});
   const [savingRows, setSavingRows] = useState<Record<number, boolean>>({});
   const [saveInfo, setSaveInfo] = useState<Record<number, string>>({});
+  const [pendingDocuments, setPendingDocuments] = useState<
+    AdminPendingDocument[]
+  >([]);
+  const [openDocumentId, setOpenDocumentId] = useState<number | null>(null);
+
+  const loadPlayers = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const userId = getUserIdFromCookie();
+      if (!userId) {
+        throw new Error("Session admin introuvable. Reconnectez-vous.");
+      }
+
+      setAdminUserId(userId);
+      const [response, todo] = await Promise.all([
+        getAdminPlayers(userId),
+        getAdminTodo(userId),
+      ]);
+      setPlayers(response.items);
+      setPendingDocuments(todo.pending_documents);
+
+      const initialSelections: Record<number, RowSelection> = {};
+      for (const player of response.items) {
+        initialSelections[player.id] = {
+          phone: player.phone || "",
+          dossier: player.dossier_stage,
+          statut: player.recruitment_status,
+          service: player.service_plan,
+          canal: player.acquisition_channel,
+          periode: player.intake_period,
+        };
+      }
+      setSelections(initialSelections);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur de chargement");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadPlayers = async () => {
-      setLoading(true);
-      setError("");
-
-      try {
-        const userId = getUserIdFromCookie();
-        if (!userId) {
-          throw new Error("Session admin introuvable. Reconnectez-vous.");
-        }
-
-        setAdminUserId(userId);
-        const response = await getAdminPlayers(userId);
-        setPlayers(response.items);
-
-        const initialSelections: Record<number, RowSelection> = {};
-        for (const player of response.items) {
-          initialSelections[player.id] = {
-            phone: player.phone || "",
-            dossier: player.dossier_stage,
-            statut: player.recruitment_status,
-            service: player.service_plan,
-            canal: player.acquisition_channel,
-            periode: player.intake_period,
-          };
-        }
-        setSelections(initialSelections);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Erreur de chargement");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadPlayers();
   }, []);
+
+  const openOldestPendingDocument = (playerId: number) => {
+    // La liste vient déjà triée du plus ancien au plus récent (voir /admin/todo).
+    const oldest = pendingDocuments.find((doc) => doc.player_id === playerId);
+    if (oldest) setOpenDocumentId(oldest.document_id);
+  };
 
   const playersCount = useMemo(() => players.length, [players]);
 
@@ -276,7 +293,19 @@ export default function AdminPlayersPage() {
                   return (
                     <tr key={player.id} className="border-b border-border-custom/70 last:border-b-0">
                       <td className="px-3 py-3 font-semibold text-text-custom">
-                        {player.last_name}
+                        <div className="flex items-center gap-1.5">
+                          {player.last_name}
+                          {player.pending_documents_count > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => openOldestPendingDocument(player.id)}
+                              title={`${player.pending_documents_count} document${player.pending_documents_count > 1 ? "s" : ""} en attente de validation`}
+                              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-custom text-white text-[10px] font-bold shrink-0"
+                            >
+                              {player.pending_documents_count}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-text-custom">{player.first_name}</td>
                       <td className="px-3 py-3 text-text-custom">
@@ -408,6 +437,15 @@ export default function AdminPlayersPage() {
           </table>
         </div>
       </div>
+
+      <DocumentReviewModal
+        documentId={openDocumentId}
+        onClose={() => {
+          setOpenDocumentId(null);
+          loadPlayers();
+        }}
+        onReviewed={loadPlayers}
+      />
     </section>
   );
 }

@@ -1,10 +1,76 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { getPlayerProfile, getUserIdFromCookie } from "@/lib/api";
+import { usePlayerDocuments } from "@/lib/player-documents-context";
+
 export default function TopBanner({
   openSidebar,
 }: {
   openSidebar: () => void;
 }) {
+  const { documents, loading: loadingStats } = usePlayerDocuments();
+
+  const [profile, setProfile] = useState<{
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string | null;
+    universityName: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const userId = getUserIdFromCookie();
+        if (!userId) return;
+        const response = await getPlayerProfile(userId);
+        setProfile({
+          firstName: response.profile.first_name,
+          lastName: response.profile.last_name,
+          dateOfBirth: response.profile.date_of_birth,
+          universityName: response.university?.name ?? null,
+        });
+      } catch {
+        // Garde l'en-tête minimal si l'API est indisponible.
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  const initials = profile
+    ? `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase()
+    : "--";
+  const fullName = profile
+    ? `${profile.firstName} ${profile.lastName}`.toUpperCase()
+    : "...";
+  const dateOfBirthLabel = profile?.dateOfBirth
+    ? new Date(profile.dateOfBirth).toLocaleDateString("fr-FR")
+    : "-";
+
+  const total = documents.length;
+  const validatedCount = documents.filter((d) => d.status === "VALIDATED").length;
+  const pendingCount = documents.filter((d) => d.status === "PENDING").length;
+  const missingCount = documents.filter(
+    (d) => d.status === "MISSING" || d.status === "REJECTED",
+  ).length;
+  const progressPct = total > 0 ? Math.round((validatedCount / total) * 100) : 0;
+
+  const lastUpdatedLabel = (() => {
+    const timestamps = documents
+      .map((d) => d.updated_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => !Number.isNaN(value));
+
+    if (timestamps.length === 0) return "-";
+    const mostRecent = new Date(Math.max(...timestamps));
+    return mostRecent.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+  })();
+
   return (
     <header className="bg-navy sticky top-0 z-[90]">
       <div className="flex items-center gap-3.5 px-4 md:px-6 py-3 md:pb-3 md:pt-3.5">
@@ -15,44 +81,35 @@ export default function TopBanner({
           ☰
         </button>
         <div className="w-[46px] h-[46px] rounded-full bg-gradient-to-br from-green-custom to-[#00876a] flex items-center justify-center text-white font-syne font-extrabold text-base shrink-0 border-2 border-green-custom/40">
-          ND
+          {initials}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-syne font-extrabold text-white text-[15px] whitespace-nowrap overflow-hidden text-ellipsis">
-            NOAH DJEBALI
+            {fullName}
           </div>
-          <div className="text-white/50 text-[11px]">📅 30/07/2005</div>
+          <div className="text-white/50 text-[11px]">📅 {dateOfBirthLabel}</div>
           <div className="text-green-custom text-[11px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-            🎓 Eastern Florida State College
+            🎓 {profile?.universityName || "Université non renseignée"}
           </div>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button className="relative bg-white/10 rounded-lg w-[34px] h-[34px] flex items-center justify-center text-[15px]">
-            💬
-            <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-orange-custom rounded-full"></div>
-          </button>
-          <button className="relative bg-white/10 rounded-lg w-[34px] h-[34px] flex items-center justify-center text-[15px]">
-            🔔
-          </button>
         </div>
       </div>
 
       <div className="px-4 md:px-6 pb-3 flex items-center gap-3">
         <div className="flex-1 h-[7px] bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-green-custom to-[#00e0a0] rounded-full"
-            style={{ width: "72%" }}
+            className="h-full bg-gradient-to-r from-green-custom to-[#00e0a0] rounded-full transition-all"
+            style={{ width: `${progressPct}%` }}
           ></div>
         </div>
         <div className="text-white font-syne font-extrabold text-[15px] shrink-0">
-          72%
+          {loadingStats ? "..." : `${progressPct}%`}
         </div>
       </div>
 
       <div className="flex border-t border-white/10">
         <div className="flex-1 text-center py-2 px-1 md:px-1.5 border-r border-white/10">
           <div className="font-syne font-bold text-[17px] sm:text-[15px] text-green-custom">
-            8/12
+            {loadingStats ? "..." : `${validatedCount}/${total}`}
           </div>
           <div className="text-white/40 text-[9.5px] sm:text-[8.5px] font-medium">
             Validés
@@ -60,7 +117,7 @@ export default function TopBanner({
         </div>
         <div className="flex-1 text-center py-2 px-1 md:px-1.5 border-r border-white/10">
           <div className="font-syne font-bold text-[17px] sm:text-[15px] text-orange-custom">
-            2
+            {loadingStats ? "..." : pendingCount}
           </div>
           <div className="text-white/40 text-[9.5px] sm:text-[8.5px] font-medium">
             En attente
@@ -68,7 +125,7 @@ export default function TopBanner({
         </div>
         <div className="flex-1 text-center py-2 px-1 md:px-1.5 border-r border-white/10">
           <div className="font-syne font-bold text-[17px] sm:text-[15px] text-[#fc8181]">
-            2
+            {loadingStats ? "..." : missingCount}
           </div>
           <div className="text-white/40 text-[9.5px] sm:text-[8.5px] font-medium">
             Manquants
@@ -76,7 +133,7 @@ export default function TopBanner({
         </div>
         <div className="flex-1 text-center py-2 px-1 md:px-1.5">
           <div className="font-syne font-bold text-[17px] sm:text-[15px] text-white/70 text-[13px]">
-            12/06
+            {loadingStats ? "..." : lastUpdatedLabel}
           </div>
           <div className="text-white/40 text-[9.5px] sm:text-[8.5px] font-medium">
             Dernière MAJ

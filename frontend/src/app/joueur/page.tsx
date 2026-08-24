@@ -1,411 +1,459 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlayerDossier, getUserIdFromCookie } from "@/lib/api";
+import {
+  getApiFileUrl,
+  getUserIdFromCookie,
+  uploadPlayerDocument,
+  type PlayerDocumentItem,
+  type PlayerDocumentStatus,
+} from "@/lib/api";
+import { usePlayerDocuments } from "@/lib/player-documents-context";
+import {
+  CATEGORY_BADGE_CLASSES,
+  CATEGORY_LABELS,
+} from "@/lib/document-categories";
 
-export default function JoueurPage() {
-  const [apiError, setApiError] = useState("");
-  const [loadingDossier, setLoadingDossier] = useState(true);
-  const [progress, setProgress] = useState(72);
-  const [steps, setSteps] = useState<
-    Array<{
-      label: string;
-      status: "done" | "current" | "upcoming";
-      icon: string;
-    }>
-  >([
-    { label: "Passeport", status: "done", icon: "✓" },
-    { label: "Relevés", status: "done", icon: "✓" },
-    { label: "Anglais", status: "done", icon: "✓" },
-    { label: "NCAA", status: "current", icon: "🏛" },
-    { label: "I-20", status: "upcoming", icon: "📋" },
-    { label: "Visa F1", status: "upcoming", icon: "🛂" },
-    { label: "Départ", status: "upcoming", icon: "✈️" },
-  ]);
-  const [documentStatus, setDocumentStatus] = useState<
-    Array<{ id: number; label: string; status: string }>
-  >([]);
+// Heuristique de tri provisoire, en attendant qu'AIDEN pilote la vraie
+// priorisation. Refusé d'abord, puis manquant (délai total le plus long en
+// premier : moins de marge, donc plus urgent à démarrer), puis en attente,
+// puis validé. L'appelant ci-dessous n'aura pas à changer quand la vraie
+// logique arrivera.
+const URGENCY_STATUS_RANK: Record<PlayerDocumentStatus, number> = {
+  REJECTED: 0,
+  MISSING: 1,
+  PENDING: 2,
+  VALIDATED: 3,
+};
 
-  useEffect(() => {
-    const loadDossier = async () => {
-      setApiError("");
-      setLoadingDossier(true);
+function sortDocumentsByUrgency(
+  items: PlayerDocumentItem[],
+): PlayerDocumentItem[] {
+  return [...items].sort((a, b) => {
+    const rankDiff = URGENCY_STATUS_RANK[a.status] - URGENCY_STATUS_RANK[b.status];
+    if (rankDiff !== 0) return rankDiff;
 
-      try {
-        const userId = getUserIdFromCookie();
-        if (!userId) {
-          throw new Error(
-            "Session incomplète: user_id manquant, reconnectez-vous.",
-          );
-        }
+    if (a.delay_total_days === null && b.delay_total_days === null) return 0;
+    if (a.delay_total_days === null) return 1;
+    if (b.delay_total_days === null) return -1;
+    return b.delay_total_days - a.delay_total_days;
+  });
+}
 
-        const dossier = await getPlayerDossier(userId);
-        setProgress(dossier.player.progress_percentage || 0);
-
-        if (dossier.milestones.length > 0) {
-          setSteps(
-            dossier.milestones.map((milestone) => {
-              const normalized = milestone.status?.toUpperCase();
-              const status =
-                normalized === "COMPLETED"
-                  ? "done"
-                  : normalized === "CURRENT"
-                    ? "current"
-                    : "upcoming";
-              const icon =
-                status === "done" ? "✓" : status === "current" ? "🏛" : "📋";
-
-              return {
-                label: milestone.name,
-                status,
-                icon,
-              };
-            }),
-          );
-        }
-
-        setDocumentStatus(
-          dossier.documents.slice(0, 6).map((doc) => ({
-            id: doc.id,
-            label: `Document #${doc.id}`,
-            status: doc.status,
-          })),
-        );
-      } catch (err) {
-        setApiError(
-          err instanceof Error ? err.message : "Erreur de chargement",
-        );
-      } finally {
-        setLoadingDossier(false);
-      }
-    };
-
-    loadDossier();
-  }, []);
-
-  const renderDocumentRow = (item: {
-    id: number;
-    label: string;
-    status: string;
-  }) => {
-    const normalized = item.status?.toUpperCase();
-    if (normalized === "VALIDATED") {
-      return (
-        <div
-          key={item.id}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]"
-        >
-          <div className="w-[7px] h-[7px] rounded-full bg-green-custom shrink-0"></div>
-          <div className="flex-1 text-slate-900">{item.label}</div>
-          <div className="text-[10.5px] font-semibold whitespace-nowrap text-green-custom">
-            ✓ Validé
-          </div>
-        </div>
-      );
-    }
-
-    if (normalized === "PENDING") {
-      return (
-        <div
-          key={item.id}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#FFF3EC] border border-[#ffd3be] mb-2 text-[13px]"
-        >
-          <div className="w-[7px] h-[7px] rounded-full bg-orange-custom shrink-0"></div>
-          <div className="flex-1 text-slate-900">{item.label}</div>
-          <div className="text-[10.5px] font-semibold whitespace-nowrap text-orange-custom">
-            🕐 Attente
-          </div>
-        </div>
-      );
-    }
-
-    if (normalized === "REJECTED") {
-      return (
-        <div
-          key={item.id}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#FDECEC] border border-[#f6caca] mb-2 text-[13px]"
-        >
-          <div className="w-[7px] h-[7px] rounded-full bg-red-custom shrink-0"></div>
-          <div className="flex-1 text-slate-900">{item.label}</div>
-          <div className="text-[10.5px] font-semibold whitespace-nowrap text-red-custom">
-            ✗ Refusé
-          </div>
-        </div>
-      );
-    }
-
+function StatusBadge({ status }: { status: PlayerDocumentStatus }) {
+  if (status === "VALIDATED") {
     return (
-      <div
-        key={item.id}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sd-bg border border-border-custom mb-2 text-[13px]"
-      >
-        <div className="w-[7px] h-[7px] rounded-full bg-muted shrink-0"></div>
-        <div className="flex-1 text-slate-900">{item.label}</div>
-        <div className="text-[10.5px] font-semibold whitespace-nowrap text-muted">
-          Non envoyé
+      <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#E8F8F2] text-[#00876a]">
+        ✓ Validé
+      </span>
+    );
+  }
+  if (status === "PENDING") {
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#FFF3EC] text-orange-custom">
+        🕐 En attente
+      </span>
+    );
+  }
+  if (status === "REJECTED") {
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#FDECEC] text-red-custom">
+        ✗ Refusé
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-sd-bg text-muted">
+      Non envoyé
+    </span>
+  );
+}
+
+function DocumentRow({
+  doc,
+  isSelected,
+  onClick,
+}: {
+  doc: PlayerDocumentItem;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-card rounded-xl p-3.5 flex items-center gap-3 cursor-pointer transition-all hover:shadow-[0_3px_14px_rgba(15,28,63,0.07)] ${
+        isSelected
+          ? "border border-green-custom shadow-[0_0_0_2px_rgba(0,196,140,0.15)]"
+          : "border border-border-custom hover:border-[#c0cbdf]"
+      }`}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-syne font-bold text-sm text-navy truncate">
+          {doc.name}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+          <span
+            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_BADGE_CLASSES[doc.category]}`}
+          >
+            {CATEGORY_LABELS[doc.category]}
+          </span>
+          {doc.delay_total_days !== null && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#EEF4FF] text-blue-custom">
+              ⏱ {doc.delay_total_days} j
+            </span>
+          )}
         </div>
       </div>
+      <StatusBadge status={doc.status} />
+    </div>
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} Mo`;
+}
+
+function DocumentDetail({
+  doc,
+  uploading,
+  uploadError,
+  draftFile,
+  onDraftFileSelected,
+  onValidateDraft,
+  onDiscardDraft,
+}: {
+  doc: PlayerDocumentItem | null;
+  uploading: boolean;
+  uploadError: string;
+  draftFile: File | null;
+  onDraftFileSelected: (file: File) => void;
+  onValidateDraft: () => void;
+  onDiscardDraft: () => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  if (!doc) {
+    return (
+      <div className="p-6 text-center text-muted text-sm">
+        Sélectionnez un document dans la liste pour voir le détail.
+      </div>
     );
-  };
+  }
 
   return (
-    <>
-      {apiError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-custom">
-          Connexion API impossible: {apiError}
+    <div className="p-4 md:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-syne font-extrabold text-base text-navy">
+            {doc.name}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_BADGE_CLASSES[doc.category]}`}
+            >
+              {CATEGORY_LABELS[doc.category]}
+            </span>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                doc.is_required_by_default
+                  ? "bg-[#FFF3EC] text-orange-custom"
+                  : "bg-sd-bg text-muted"
+              }`}
+            >
+              {doc.is_required_by_default ? "Obligatoire" : "Facultatif"}
+            </span>
+          </div>
+        </div>
+        <StatusBadge status={doc.status} />
+      </div>
+
+      {doc.description_for_player && (
+        <div className="mt-4">
+          <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
+            Tutoriel
+          </div>
+          <p className="text-[13.5px] leading-[1.65] text-text-custom whitespace-pre-wrap">
+            {doc.description_for_player}
+          </p>
         </div>
       )}
 
-      <div className="overflow-x-auto scbar-hidden mb-5">
-        <div className="flex items-start min-w-max pb-1">
-          {steps.map((step, idx) => (
-            <div
-              key={idx}
-              className="flex flex-col items-center min-w-[80px] cursor-pointer"
-            >
-              <div className="flex items-center w-full">
-                <div
-                  className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[13px] shrink-0 border-2 transition-all 
-                    ${step.status === "done" ? "bg-green-custom text-white border-transparent" : ""}
-                    ${step.status === "current" ? "bg-white border-orange-custom text-orange-custom shadow-[0_0_0_4px_rgba(255,107,53,0.15)]" : ""}
-                    ${step.status === "upcoming" ? "bg-white border-border-custom text-muted" : ""}
-                  `}
-                >
-                  {step.icon}
+      {doc.admin_comment && (
+        <div className="mt-4">
+          <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
+            Commentaire de l&apos;agence
+          </div>
+          <p
+            className={`text-[13.5px] leading-[1.65] rounded-lg border px-3 py-2.5 whitespace-pre-wrap ${
+              doc.status === "REJECTED"
+                ? "border-red-200 bg-red-50 text-red-custom"
+                : "border-border-custom bg-sd-bg text-text-custom"
+            }`}
+          >
+            {doc.admin_comment}
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap mt-4">
+        {doc.delay_total_days !== null && (
+          <span
+            className="inline-block text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#EEF4FF] text-blue-custom cursor-help"
+            title={`Prise de RDV : ${doc.delay_appointment_days ?? 0} j\nComplétion : ${doc.delay_completion_days ?? 0} j\nTraitement : ${doc.delay_processing_days ?? 0} j`}
+          >
+            ⏱ {doc.delay_total_days} j au total (survolez pour le détail)
+          </span>
+        )}
+        {doc.external_url && (
+          <a
+            href={doc.external_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-blue-custom hover:underline"
+          >
+            🔗 Site officiel
+          </a>
+        )}
+        {doc.file_url && (
+          <a
+            href={getApiFileUrl(doc.file_url)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-navy hover:underline"
+          >
+            📄 Voir mon fichier
+          </a>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
+          Déposer votre document
+        </div>
+
+        {uploadError && (
+          <div className="mb-2.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-custom">
+            {uploadError}
+          </div>
+        )}
+
+        {draftFile ? (
+          <div className="rounded-xl border-2 border-blue-custom/40 bg-[#EEF4FF] p-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl shrink-0">📎</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-navy truncate">
+                  {draftFile.name}
                 </div>
-                {idx < steps.length - 1 && (
-                  <div
-                    className={`flex-1 h-[2px] min-w-[20px] ${step.status === "done" ? "bg-green-custom" : "bg-border-custom"}`}
-                  ></div>
-                )}
+                <div className="text-[11px] text-muted">
+                  {formatFileSize(draftFile.size)} · Brouillon, pas encore
+                  envoyé
+                </div>
               </div>
-              <div
-                className={`text-[10.5px] font-semibold mt-1.5 text-center 
-                  ${step.status === "done" ? "text-green-custom" : ""}
-                  ${step.status === "current" ? "text-orange-custom" : ""}
-                  ${step.status === "upcoming" ? "text-muted" : ""}
-                `}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={onValidateDraft}
+                disabled={uploading}
+                className="flex-1 rounded-lg bg-green-custom px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {step.label}
+                {uploading ? "Envoi en cours..." : "✓ Valider l'envoi"}
+              </button>
+              <button
+                type="button"
+                onClick={onDiscardDraft}
+                disabled={uploading}
+                className="rounded-lg border border-border-custom px-3 py-2 text-sm font-semibold text-text-custom disabled:opacity-60"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) onDraftFileSelected(file);
+            }}
+            className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl px-3 py-5 text-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-green-custom bg-[#F0FFF8]"
+                : "border-border-custom hover:border-green-custom hover:bg-[#F0FFF8]"
+            }`}
+          >
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onDraftFileSelected(file);
+                e.target.value = "";
+              }}
+            />
+            <div className="text-center">
+              <div className="text-2xl mb-1">📤</div>
+              <div className="text-[13px] text-muted">
+                {doc.file_url
+                  ? "Remplacer le fichier"
+                  : "Glissez votre fichier ici ou appuyez pour parcourir"}
+              </div>
+              <div className="text-[11px] text-muted mt-1">
+                PDF · JPG · PNG · 10 Mo max
               </div>
             </div>
-          ))}
-        </div>
+          </label>
+        )}
       </div>
+    </div>
+  );
+}
 
-      <div className="bg-card rounded-2xl border border-border-custom overflow-hidden">
-        <div className="bg-gradient-to-br from-navy to-navy-light p-5 md:p-[22px]">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-white font-syne font-extrabold text-[15px] shrink-0">
-              4
-            </div>
-            <div className="flex-1">
-              <div className="text-white/50 text-[10px] font-semibold tracking-[0.8px] uppercase mb-1">
-                Étape en cours
-              </div>
-              <div className="text-white font-syne font-extrabold text-base md:text-lg leading-[1.2]">
-                NCAA — Inscription athlétique
-              </div>
-            </div>
+export default function JoueurPage() {
+  const { documents, loading, error, refresh } = usePlayerDocuments();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
+    null,
+  );
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [uploadingId, setUploadingId] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const [draftFile, setDraftFile] = useState<File | null>(null);
+
+  // Auto-sélectionne le document le plus urgent au premier chargement
+  // uniquement — les rafraîchissements suivants (après upload) ne doivent
+  // pas déplacer la sélection courante du joueur.
+  useEffect(() => {
+    if (selectedTemplateId === null && documents.length > 0) {
+      const first = sortDocumentsByUrgency(documents)[0];
+      setSelectedTemplateId(first.document_template_id);
+    }
+  }, [documents, selectedTemplateId]);
+
+  const handleUpload = async (documentTemplateId: number, file: File) => {
+    const userId = getUserIdFromCookie();
+    if (!userId) {
+      setUploadError("Session incomplète: reconnectez-vous.");
+      return;
+    }
+
+    setUploadError("");
+    setUploadingId(documentTemplateId);
+
+    try {
+      await uploadPlayerDocument(userId, documentTemplateId, file);
+      await refresh();
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Erreur lors de l'envoi",
+      );
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  const selectDocument = (documentTemplateId: number) => {
+    setSelectedTemplateId(documentTemplateId);
+    setUploadError("");
+    setDraftFile(null);
+    setMobileDetailOpen(true);
+  };
+
+  const handleValidateDraft = async () => {
+    if (!selectedDocument || !draftFile) return;
+    await handleUpload(selectedDocument.document_template_id, draftFile);
+    setDraftFile(null);
+  };
+
+  const handleDiscardDraft = () => {
+    setDraftFile(null);
+    setUploadError("");
+  };
+
+  const sorted = sortDocumentsByUrgency(documents);
+  const selectedDocument =
+    sorted.find((d) => d.document_template_id === selectedTemplateId) ?? null;
+
+  return (
+    <>
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-custom">
+          Connexion API impossible: {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="bg-card rounded-2xl border border-border-custom p-8 text-center text-muted text-sm">
+          Chargement de vos documents...
+        </div>
+      )}
+
+      {!loading && documents.length === 0 && (
+        <div className="bg-card rounded-2xl border border-border-custom p-8 text-center text-muted text-sm">
+          Aucun document n&apos;est demandé pour le moment.
+        </div>
+      )}
+
+      {!loading && documents.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-[18px] items-start">
+          {/* LIST */}
+          <div className="flex flex-col gap-2.5">
+            {sorted.map((doc) => (
+              <DocumentRow
+                key={doc.document_template_id}
+                doc={doc}
+                isSelected={selectedTemplateId === doc.document_template_id}
+                onClick={() => selectDocument(doc.document_template_id)}
+              />
+            ))}
           </div>
-          <div className="mt-2 text-white/70 text-xs font-medium">
-            Progression dossier: {loadingDossier ? "..." : `${progress}%`}
-          </div>
-          <div className="mt-2.5 inline-flex items-center gap-1.5 bg-orange-custom/20 text-[#ffb89a] px-3 py-1.5 rounded-full text-[11.5px] font-semibold sm:text-[10.5px]">
-            {loadingDossier
-              ? "⏳ Chargement du dossier..."
-              : "🕐 En attente de validation"}
+
+          {/* DETAIL PANEL (desktop) */}
+          <div className="hidden lg:block bg-card rounded-[14px] border border-border-custom overflow-hidden sticky top-[220px] max-h-[calc(100vh-240px)] overflow-y-auto">
+            <DocumentDetail
+              doc={selectedDocument}
+              uploading={uploadingId === selectedDocument?.document_template_id}
+              uploadError={uploadError}
+              draftFile={draftFile}
+              onDraftFileSelected={setDraftFile}
+              onValidateDraft={handleValidateDraft}
+              onDiscardDraft={handleDiscardDraft}
+            />
           </div>
         </div>
+      )}
 
-        <div className="p-4 md:p-[22px]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-[22px]">
-            {/* L COL */}
-            <div>
-              <div className="mb-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Description
-                </div>
-                <p className="text-[13.5px] leading-[1.65] text-text-custom">
-                  La NCAA régit le sport universitaire américain. Votre
-                  inscription est obligatoire pour pouvoir participer aux
-                  compétitions interuniversitaires.
-                </p>
-              </div>
-
-              <div className="mb-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Pourquoi ce document ?
-                </div>
-                <p className="text-[13.5px] leading-[1.65] text-text-custom">
-                  Sans clearance NCAA, vous ne pouvez pas jouer pour votre
-                  équipe universitaire. Cette étape valide votre éligibilité
-                  sportive et académique.
-                </p>
-              </div>
-
-              <div className="mb-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Comment l&apos;obtenir
-                </div>
-                <ul className="list-none space-y-1">
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-green-custom font-bold">→</span> Créer
-                    un compte sur <strong>eligibilitycenter.org</strong>
-                  </li>
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-green-custom font-bold">→</span>{" "}
-                    Renseigner votre parcours scolaire complet
-                  </li>
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-green-custom font-bold">→</span>{" "}
-                    Envoyer vos relevés de notes officiels à la NCAA
-                  </li>
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-green-custom font-bold">→</span>{" "}
-                    Attendre la confirmation de Soccer Duty
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mb-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Délai estimé
-                </div>
-                <div className="inline-flex items-center gap-1.5 bg-[#EEF4FF] text-blue-custom px-3 py-1.5 rounded-lg text-[13px] font-semibold">
-                  ⏱ 3 à 6 semaines
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Erreurs fréquentes
-                </div>
-                <ul className="list-none space-y-1">
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-red-custom font-bold">✗</span> Oublier
-                    de déclarer un cours hors établissement
-                  </li>
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-red-custom font-bold">✗</span> Relevés
-                    de notes non certifiés
-                  </li>
-                  <li className="text-[13px] text-slate-900 flex items-start gap-2">
-                    <span className="text-red-custom font-bold">✗</span> Email
-                    de confirmation non vérifié
-                  </li>
-                </ul>
-              </div>
-
-              <div className="flex gap-2 flex-wrap mt-3">
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sd-bg border border-border-custom text-[12px] font-medium text-text-custom whitespace-nowrap hover:border-navy hover:text-navy transition-all">
-                  📄 Guide PDF
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sd-bg border border-border-custom text-[12px] font-medium text-text-custom whitespace-nowrap hover:border-navy hover:text-navy transition-all">
-                  ▶ Vidéo
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sd-bg border border-border-custom text-[12px] font-medium text-text-custom whitespace-nowrap hover:border-navy hover:text-navy transition-all">
-                  🔗 eligibilitycenter.org
-                </button>
-              </div>
-            </div>
-
-            {/* R COL */}
-            <div>
-              <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                Déposer votre document
-              </div>
-              <div className="border-2 border-dashed border-border-custom rounded-xl p-6 text-center cursor-pointer transition-all hover:border-green-custom hover:bg-[#F0FFF8]">
-                <div className="text-3xl mb-1.5">📤</div>
-                <div className="text-[13px] text-muted">
-                  Glissez votre fichier ici ou{" "}
-                  <strong className="text-text-custom">
-                    appuyez pour parcourir
-                  </strong>
-                </div>
-                <div className="text-[11px] text-muted mt-1">
-                  PDF · JPG · PNG acceptés
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Statut de vos documents
-                </div>
-
-                {documentStatus.length > 0 ? (
-                  documentStatus.map(renderDocumentRow)
-                ) : (
-                  <div className="text-[13px] text-muted">
-                    Aucun document trouvé pour ce dossier.
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-gradient-to-br from-navy to-[#2a3f7a] rounded-xl p-3.5 mt-4 flex items-center gap-3">
-                <div className="text-[22px]">🤖</div>
-                <div className="text-white/70 text-[13px] flex-1">
-                  <strong className="text-white block text-[13.5px] mb-px">
-                    Demander à l&apos;IA
-                  </strong>
-                  Je suis sur l&apos;étape NCAA — posez votre question
-                </div>
-                <button className="bg-green-custom text-white px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap shrink-0">
-                  Poser une question
-                </button>
-              </div>
-
-              <div className="mt-5">
-                <div className="font-syne text-[11.5px] font-bold uppercase tracking-[0.7px] text-muted mb-2">
-                  Contacter Soccer Duty
-                </div>
-                <div className="bg-sd-bg rounded-lg p-2.5 mb-2 text-[12.5px] max-h-[130px] overflow-y-auto">
-                  <div className="mb-2">
-                    <span className="font-semibold text-[11px] text-slate-900">
-                      Noah
-                    </span>
-                    <span className="text-muted text-[10px] ml-1">
-                      12/06 14:22
-                    </span>
-                    <div className="text-[12.5px] mt-0.5 text-slate-900">
-                      Bonjour, j&apos;ai envoyé mes relevés de notes.
-                    </div>
-                  </div>
-                  <div className="mb-2 text-right">
-                    <span className="font-semibold text-[11px] text-green-custom">
-                      Soccer Duty
-                    </span>
-                    <span className="text-muted text-[10px] ml-1">
-                      12/06 15:10
-                    </span>
-                    <div className="text-[12.5px] mt-0.5 text-slate-900">
-                      Reçus, en cours de validation !
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 px-3 py-2 rounded-lg bg-white border border-border-custom text-[13px] outline-none"
-                    placeholder="Votre message…"
-                  />
-                  <button className="bg-navy text-white border-none rounded-lg px-4 py-2 text-[12.5px] font-semibold whitespace-nowrap">
-                    Envoyer
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* MOBILE DETAIL DRAWER */}
+      <div
+        className={`fixed inset-0 z-[300] flex-col lg:hidden ${mobileDetailOpen ? "flex" : "hidden"}`}
+      >
+        <div
+          className="flex-[0_0_60px] bg-black/40"
+          onClick={() => setMobileDetailOpen(false)}
+        ></div>
+        <div className="flex-1 bg-card overflow-y-auto rounded-t-[20px]">
+          <div className="w-10 h-1 bg-border-custom rounded-full mx-auto mt-2.5"></div>
+          <DocumentDetail
+            doc={selectedDocument}
+            uploading={uploadingId === selectedDocument?.document_template_id}
+            uploadError={uploadError}
+            draftFile={draftFile}
+            onDraftFileSelected={setDraftFile}
+            onValidateDraft={handleValidateDraft}
+            onDiscardDraft={handleDiscardDraft}
+          />
         </div>
-      </div>
-
-      <div className="flex justify-between mt-[22px] pt-[18px] border-t border-border-custom gap-3">
-        <button className="flex items-center gap-2 px-5 py-3 rounded-[10px] text-sm font-semibold bg-sd-bg border border-border-custom text-muted transition-all">
-          ← Test d&apos;anglais
-        </button>
-        <button className="flex items-center justify-center flex-1 gap-2 px-5 py-3 rounded-[10px] text-sm font-semibold bg-navy text-white hover:bg-navy-light transition-all cursor-pointer">
-          I-20 →
-        </button>
       </div>
     </>
   );

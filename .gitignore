@@ -1,0 +1,3 @@
+# Fichiers uploadés par les joueurs (stockage local, hors de backend/ pour
+# ne pas être vu par le file-watcher d'uvicorn --reload)
+uploads/
