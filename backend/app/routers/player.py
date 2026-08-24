@@ -162,6 +162,30 @@ def player_documents(user_id: int, db: Session = Depends(get_db)):
     return {"count": len(items), "items": items}
 
 
+@router.get("/notifications/{user_id}")
+def player_notifications(user_id: int, db: Session = Depends(get_db)):
+    _get_profile_from_user(user_id, db)  # 404 si l'utilisateur n'est pas un joueur valide
+
+    notifications = (
+        db.query(models.Notification)
+        .filter(models.Notification.user_id == user_id)
+        .order_by(models.Notification.created_at.desc())
+        .all()
+    )
+    items = [
+        {
+            "id": n.id,
+            "title": n.title,
+            "content": n.content,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "related_document_id": n.related_document_id,
+        }
+        for n in notifications
+    ]
+    return {"count": len(items), "items": items}
+
+
 @router.get("/messages/{user_id}")
 def player_messages(user_id: int, db: Session = Depends(get_db)):
     profile = _get_profile_from_user(user_id, db)

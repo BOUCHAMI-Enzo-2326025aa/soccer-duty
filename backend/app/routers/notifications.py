@@ -53,3 +53,16 @@ def mark_notification_read(notification_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(notif)
     return notif
+
+
+@router.patch("/{notification_id}/unread")
+def mark_notification_unread(notification_id: int, db: Session = Depends(get_db)):
+    notif = db.query(models.Notification).filter(models.Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notif.is_read = False
+    db.add(notif)
+    db.commit()
+    db.refresh(notif)
+    return notif

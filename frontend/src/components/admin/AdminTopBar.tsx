@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 export default function AdminTopBar({
   openSidebar,
   title = "ACCUEIL",
@@ -31,24 +29,6 @@ export default function AdminTopBar({
           placeholder="Rechercher un joueur…"
           className="bg-transparent border-none outline-none text-[13px] text-text-custom w-full font-inter placeholder-muted"
         />
-      </div>
-
-      <div className="ml-auto flex items-center gap-2">
-        <Link
-          href="/admin/documents"
-          className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors"
-        >
-          📄
-          <div className="absolute top-1 right-1 w-[7px] h-[7px] bg-orange-custom rounded-full border-2 border-white"></div>
-        </Link>
-        <button className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors">
-          💬
-          <div className="absolute top-1 right-1 w-[7px] h-[7px] bg-orange-custom rounded-full border-2 border-white"></div>
-        </button>
-        <button className="relative bg-sd-bg border border-border-custom rounded-lg w-9 h-9 flex items-center justify-center cursor-pointer text-[15px] shrink-0 hover:bg-white transition-colors">
-          🔔
-          <div className="absolute top-1 right-1 w-[7px] h-[7px] bg-orange-custom rounded-full border-2 border-white"></div>
-        </button>
       </div>
     </header>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { getPlayerProfile, getUserIdFromCookie } from "@/lib/api";
 import { usePlayerDocuments } from "@/lib/player-documents-context";
 
 export default function TopBanner({
@@ -8,6 +10,43 @@ export default function TopBanner({
   openSidebar: () => void;
 }) {
   const { documents, loading: loadingStats } = usePlayerDocuments();
+
+  const [profile, setProfile] = useState<{
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string | null;
+    universityName: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const userId = getUserIdFromCookie();
+        if (!userId) return;
+        const response = await getPlayerProfile(userId);
+        setProfile({
+          firstName: response.profile.first_name,
+          lastName: response.profile.last_name,
+          dateOfBirth: response.profile.date_of_birth,
+          universityName: response.university?.name ?? null,
+        });
+      } catch {
+        // Garde l'en-tête minimal si l'API est indisponible.
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  const initials = profile
+    ? `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase()
+    : "--";
+  const fullName = profile
+    ? `${profile.firstName} ${profile.lastName}`.toUpperCase()
+    : "...";
+  const dateOfBirthLabel = profile?.dateOfBirth
+    ? new Date(profile.dateOfBirth).toLocaleDateString("fr-FR")
+    : "-";
 
   const total = documents.length;
   const validatedCount = documents.filter((d) => d.status === "VALIDATED").length;
@@ -42,25 +81,16 @@ export default function TopBanner({
           ☰
         </button>
         <div className="w-[46px] h-[46px] rounded-full bg-gradient-to-br from-green-custom to-[#00876a] flex items-center justify-center text-white font-syne font-extrabold text-base shrink-0 border-2 border-green-custom/40">
-          ND
+          {initials}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-syne font-extrabold text-white text-[15px] whitespace-nowrap overflow-hidden text-ellipsis">
-            NOAH DJEBALI
+            {fullName}
           </div>
-          <div className="text-white/50 text-[11px]">📅 30/07/2005</div>
+          <div className="text-white/50 text-[11px]">📅 {dateOfBirthLabel}</div>
           <div className="text-green-custom text-[11px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-            🎓 Eastern Florida State College
+            🎓 {profile?.universityName || "Université non renseignée"}
           </div>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button className="relative bg-white/10 rounded-lg w-[34px] h-[34px] flex items-center justify-center text-[15px]">
-            💬
-            <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-orange-custom rounded-full"></div>
-          </button>
-          <button className="relative bg-white/10 rounded-lg w-[34px] h-[34px] flex items-center justify-center text-[15px]">
-            🔔
-          </button>
         </div>
       </div>
 

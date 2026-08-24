@@ -13,6 +13,9 @@ export default function AdminNotificationsPage() {
   const [error, setError] = useState("");
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [openDocumentId, setOpenDocumentId] = useState<number | null>(null);
+  const [openNotificationId, setOpenNotificationId] = useState<number | null>(
+    null,
+  );
 
   const load = async () => {
     setLoading(true);
@@ -76,24 +79,29 @@ export default function AdminNotificationsPage() {
               onClick={() => {
                 if (notification.related_document_id) {
                   setOpenDocumentId(notification.related_document_id);
+                  setOpenNotificationId(notification.id);
                 }
               }}
-              className={`bg-card rounded-xl border p-3.5 flex items-start gap-3 transition-all ${
+              className={`rounded-xl border p-3.5 flex items-start gap-3 transition-all ${
                 notification.related_document_id
                   ? "cursor-pointer hover:border-[#c0cbdf]"
                   : ""
               } ${
-                !notification.is_read
-                  ? "border-blue-custom/40 bg-[#EEF4FF]"
-                  : "border-border-custom"
+                notification.is_read
+                  ? "bg-sd-bg border-border-custom opacity-60 hover:opacity-100"
+                  : "border-blue-custom/40 bg-[#EEF4FF]"
               }`}
             >
               <span className="text-lg shrink-0">📄</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-navy">
+                <div
+                  className={`text-sm font-semibold ${notification.is_read ? "text-muted" : "text-navy"}`}
+                >
                   {notification.title}
                 </div>
-                <div className="text-[13px] text-text-custom mt-0.5">
+                <div
+                  className={`text-[13px] mt-0.5 ${notification.is_read ? "text-muted" : "text-text-custom"}`}
+                >
                   {notification.content}
                 </div>
                 {notification.created_at && (
@@ -113,8 +121,10 @@ export default function AdminNotificationsPage() {
 
       <DocumentReviewModal
         documentId={openDocumentId}
+        notificationId={openNotificationId}
         onClose={() => {
           setOpenDocumentId(null);
+          setOpenNotificationId(null);
           load();
         }}
         onReviewed={load}

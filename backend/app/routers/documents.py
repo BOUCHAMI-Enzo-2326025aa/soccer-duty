@@ -213,6 +213,37 @@ def _assert_admin_can_review(admin_user: models.User, document: models.Document,
         raise HTTPException(status_code=403, detail="Document is outside your agency")
 
 
+def _notify_player_of_document_review(
+    document: models.Document,
+    template: models.DocumentTemplate,
+    player: models.PlayerProfile,
+    db: Session,
+) -> None:
+    if not player.user_id:
+        return
+
+    if document.status == models.DocStatusEnum.VALIDATED:
+        title = "Document validé ✅"
+        outcome = "validé"
+    else:
+        title = "Document refusé ❌"
+        outcome = "refusé"
+
+    content = f"Votre document « {template.name} » a été {outcome}."
+    if document.admin_comment:
+        content += f" Commentaire : {document.admin_comment}"
+
+    db.add(
+        models.Notification(
+            user_id=player.user_id,
+            title=title,
+            content=content,
+            related_document_id=document.id,
+        )
+    )
+    db.commit()
+
+
 def _serialize_document_review(document: models.Document, db: Session) -> dict:
     player = (
         db.query(models.PlayerProfile)
@@ -290,5 +321,23 @@ def review_document(
     ).update({"is_read": True})
 
     db.commit()
+    db.refresh(document)
+
+    player = (
+        db.query(models.PlayerProfile)
+        .filter(models.PlayerProfile.id == document.player_id)
+        .first()
+    )
+    template = (
+        db.query(models.DocumentTemplate)
+        .filter(models.DocumentTemplate.id == document.document_template_id)
+        .first()
+    )
+    if player and template:
+        _notify_player_of_document_review(document, template, player, db)
+
+    # Le commit de la notification ci-dessus expire à nouveau les attributs
+    # de `document` (même piège que pour l'upload) : sans ce refresh, la
+    # sérialisation retomberait sur des valeurs vides.
     db.refresh(document)
     return _serialize_document_review(document, db)

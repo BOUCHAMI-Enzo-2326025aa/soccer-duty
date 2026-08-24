@@ -419,6 +419,43 @@ export async function getAdminNotifications(adminUserId?: number | null) {
   );
 }
 
+export type PlayerNotification = AdminNotification;
+
+export async function getPlayerNotifications(userId: number) {
+  return apiFetch<ListResponse<PlayerNotification>>(
+    `/player/notifications/${userId}`,
+  );
+}
+
+export async function markNotificationRead(notificationId: number) {
+  return apiFetch<PlayerNotification>(
+    `/notifications/${notificationId}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markNotificationUnread(notificationId: number) {
+  return apiFetch<PlayerNotification>(
+    `/notifications/${notificationId}/unread`,
+    { method: "PATCH" },
+  );
+}
+
+export type PlayerProfileResponse = {
+  profile: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    date_of_birth: string | null;
+    university_id: number | null;
+  };
+  university: { id: number; name: string } | null;
+};
+
+export async function getPlayerProfile(userId: number) {
+  return apiFetch<PlayerProfileResponse>(`/player/profil/${userId}`);
+}
+
 export type DocumentReviewStatus = "VALIDATED" | "REJECTED";
 
 export type DocumentReviewDetail = {

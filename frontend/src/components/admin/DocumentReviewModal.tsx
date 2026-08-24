@@ -5,6 +5,7 @@ import {
   getApiFileUrl,
   getDocumentReview,
   getUserIdFromCookie,
+  markNotificationUnread,
   reviewDocument,
   type DocumentReviewDetail,
   type DocumentReviewStatus,
@@ -16,10 +17,12 @@ import {
 
 export default function DocumentReviewModal({
   documentId,
+  notificationId = null,
   onClose,
   onReviewed,
 }: {
   documentId: number | null;
+  notificationId?: number | null;
   onClose: () => void;
   onReviewed: () => void;
 }) {
@@ -31,6 +34,8 @@ export default function DocumentReviewModal({
   );
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [markingUnread, setMarkingUnread] = useState(false);
+  const [markedUnread, setMarkedUnread] = useState(false);
 
   useEffect(() => {
     if (documentId === null) {
@@ -38,6 +43,7 @@ export default function DocumentReviewModal({
       setActionMode(null);
       setComment("");
       setError("");
+      setMarkedUnread(false);
       return;
     }
 
@@ -59,6 +65,20 @@ export default function DocumentReviewModal({
   }, [documentId]);
 
   if (documentId === null) return null;
+
+  const handleMarkNotificationUnread = async () => {
+    if (!notificationId) return;
+
+    setMarkingUnread(true);
+    try {
+      await markNotificationUnread(notificationId);
+      setMarkedUnread(true);
+    } catch {
+      // Action secondaire : un échec ici ne doit pas bloquer la révision du document.
+    } finally {
+      setMarkingUnread(false);
+    }
+  };
 
   const handleSubmitReview = async () => {
     if (!detail || !actionMode) return;
@@ -166,6 +186,21 @@ export default function DocumentReviewModal({
                   Envoyé le{" "}
                   {new Date(detail.submitted_at).toLocaleString("fr-FR")}
                 </div>
+              )}
+
+              {notificationId && (
+                <button
+                  type="button"
+                  onClick={handleMarkNotificationUnread}
+                  disabled={markingUnread || markedUnread}
+                  className="mt-2 text-xs font-semibold text-muted hover:text-navy disabled:opacity-60 disabled:hover:text-muted"
+                >
+                  {markedUnread
+                    ? "✓ Notification marquée comme non lue"
+                    : markingUnread
+                      ? "..."
+                      : "🔔 Marquer la notification comme non lue"}
+                </button>
               )}
 
               <div className="mt-5 pt-4 border-t border-border-custom">
