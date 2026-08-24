@@ -25,6 +25,3 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
-
-# Fichiers uploadés par les joueurs (stockage local)
-uploads/

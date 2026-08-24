@@ -153,6 +153,9 @@ class Document(Base):
     s3_url = Column(String, nullable=True)
     ai_analysis_result = Column(JSON, nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    admin_comment = Column(Text, nullable=True) # Commentaire visible par le joueur
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
     player = relationship("PlayerProfile", back_populates="documents")
     template = relationship("DocumentTemplate")
@@ -234,6 +237,7 @@ class Notification(Base):
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    related_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
 
 class ActivityLog(Base):
     __tablename__ = "activity_logs"

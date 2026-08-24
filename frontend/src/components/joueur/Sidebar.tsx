@@ -19,7 +19,6 @@ export default function Sidebar({
   const navItems = [
     { name: "Mon Dossier", icon: "📂", path: "/joueur" },
     { name: "Mon Profil", icon: "👤", path: "/joueur/profil" },
-    { name: "Documents", icon: "📄", path: "/joueur/documents" },
     { name: "Messagerie", icon: "💬", path: "/joueur/messages" },
     { name: "Aide", icon: "❓", path: "/joueur/aide" },
   ];

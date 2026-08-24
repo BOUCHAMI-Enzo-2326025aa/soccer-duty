@@ -1,14 +1,235 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getAdminHome,
   getAdminNotifications,
+  getAdminPlayerDocuments,
   getAdminPlayers,
   getAdminTodo,
   getAdminUniversities,
   type AdminPlayer,
+  type PlayerDocumentItem,
 } from "@/lib/api";
+import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
+
+type FilterMode =
+  | "tous"
+  | "action_requise"
+  | "en_attente"
+  | "complet"
+  | "progression"
+  | "az";
+
+const FILTERS: Array<{ key: FilterMode; label: string }> = [
+  { key: "tous", label: "Tous" },
+  { key: "action_requise", label: "⚠ Action requise" },
+  { key: "en_attente", label: "🕐 En attente" },
+  { key: "complet", label: "✅ Complets" },
+  { key: "progression", label: "↑ Progression" },
+  { key: "az", label: "A → Z" },
+];
+
+function DocumentPill({
+  doc,
+  onOpenReview,
+}: {
+  doc: PlayerDocumentItem;
+  onOpenReview: (documentId: number) => void;
+}) {
+  const classes =
+    doc.status === "VALIDATED"
+      ? "bg-[#E8F8F2] text-[#00876a]"
+      : doc.status === "PENDING"
+        ? "bg-[#EEF4FF] text-blue-custom"
+        : doc.status === "REJECTED"
+          ? "bg-[#FDECEC] text-red-custom"
+          : "bg-sd-bg text-muted";
+
+  if (!doc.document_id) {
+    return (
+      <div className={`rounded-md px-1.5 py-1 text-[11px] mb-1 truncate ${classes}`}>
+        {doc.name}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenReview(doc.document_id as number)}
+      className={`w-full text-left rounded-md px-1.5 py-1 text-[11px] mb-1 truncate transition-opacity hover:opacity-80 ${classes}`}
+    >
+      {doc.name}
+    </button>
+  );
+}
+
+function PlayerDossierContent({
+  player,
+  documents,
+  loadingDocuments,
+  formatDate,
+  getInitials,
+  onOpenReview,
+}: {
+  player: AdminPlayer | null;
+  documents: PlayerDocumentItem[];
+  loadingDocuments: boolean;
+  formatDate: (isoDate: string | null) => string;
+  getInitials: (player: AdminPlayer) => string;
+  onOpenReview: (documentId: number) => void;
+}) {
+  const validated = documents.filter((d) => d.status === "VALIDATED");
+  const pending = documents.filter((d) => d.status === "PENDING");
+  const toSend = documents.filter(
+    (d) => d.status === "MISSING" || d.status === "REJECTED",
+  );
+
+  return (
+    <>
+      <div className="bg-navy p-[18px]">
+        <div className="w-[50px] h-[50px] rounded-full bg-green-custom text-white font-syne font-extrabold text-lg flex items-center justify-center mb-2.5">
+          {player ? getInitials(player) : "--"}
+        </div>
+        <div className="text-white font-syne font-bold text-base">
+          {player ? `${player.first_name} ${player.last_name}` : "Aucun joueur"}
+        </div>
+        <div className="text-white/50 text-xs mt-0.5">
+          📅 {player ? formatDate(player.date_of_birth) : "-"}
+        </div>
+        <div className="text-green-custom text-xs font-medium mt-0.5">
+          🎓 {player?.university_name || "Université non renseignée"}
+        </div>
+        <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex-1 h-[6px] bg-white/15 rounded-[3px] overflow-hidden">
+            <div
+              className="h-full bg-green-custom rounded-[3px]"
+              style={{
+                width: `${Math.max(0, Math.min(100, player?.progress_percentage_real ?? 0))}%`,
+              }}
+            ></div>
+          </div>
+          <div className="text-white font-bold text-[13px]">
+            {player?.progress_percentage_real ?? 0}%
+          </div>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="mb-3.5">
+          <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
+            Documents
+          </div>
+          {loadingDocuments ? (
+            <div className="text-xs text-muted">Chargement...</div>
+          ) : documents.length === 0 ? (
+            <div className="text-xs text-muted">
+              Aucun document applicable à ce joueur.
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5">
+              <div>
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-[#00876a] mb-1">
+                  ✅ Validés
+                </div>
+                {validated.length === 0 && (
+                  <div className="text-[10px] text-muted">—</div>
+                )}
+                {validated.map((doc) => (
+                  <DocumentPill
+                    key={doc.document_template_id}
+                    doc={doc}
+                    onOpenReview={onOpenReview}
+                  />
+                ))}
+              </div>
+              <div>
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-blue-custom mb-1">
+                  🕐 En attente
+                </div>
+                {pending.length === 0 && (
+                  <div className="text-[10px] text-muted">—</div>
+                )}
+                {pending.map((doc) => (
+                  <DocumentPill
+                    key={doc.document_template_id}
+                    doc={doc}
+                    onOpenReview={onOpenReview}
+                  />
+                ))}
+              </div>
+              <div>
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-red-custom mb-1">
+                  📤 Manquants
+                </div>
+                {toSend.length === 0 && (
+                  <div className="text-[10px] text-muted">—</div>
+                )}
+                {toSend.map((doc) => (
+                  <DocumentPill
+                    key={doc.document_template_id}
+                    doc={doc}
+                    onOpenReview={onOpenReview}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-3.5">
+          <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
+            Messagerie
+          </div>
+          <div className="bg-sd-bg dark:bg-navy-light rounded-lg p-2.5 mb-2 text-xs max-h-[120px] overflow-y-auto">
+            <div className="mb-2 text-text-custom dark:text-white">
+              <strong>{player?.first_name || "Joueur"}</strong>{" "}
+              <span className="text-muted dark:text-white/60 text-[10px]">
+                12/06 14:22
+              </span>
+              <br />
+              Bonjour, j&apos;ai envoyé mes relevés de notes.
+            </div>
+            <div className="text-right text-text-custom dark:text-white">
+              <strong className="text-green-custom">Vous</strong>{" "}
+              <span className="text-muted dark:text-white/60 text-[10px]">
+                12/06 15:10
+              </span>
+              <br />
+              Reçus, en cours de validation !
+            </div>
+          </div>
+          <div className="flex gap-1.5 mt-2.5">
+            <input
+              className="flex-1 px-2.5 py-2 rounded-lg border border-border-custom text-xs outline-none bg-white placeholder-muted font-inter"
+              placeholder={`Répondre à ${player?.first_name || "..."}…`}
+            />
+            <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-green-custom text-white">
+              Envoyer
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-3.5">
+          <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
+            Actions rapides
+          </div>
+          <div className="flex gap-1.5 flex-wrap mt-2.5">
+            <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
+              ✏️ Modifier
+            </button>
+            <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
+              🏢 Changer agence
+            </button>
+            <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
+              📥 Télécharger
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 export default function AdminHomePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -18,6 +239,14 @@ export default function AdminHomePage() {
   const [selectedPlayer, setSelectedPlayer] = useState<AdminPlayer | null>(
     null,
   );
+  const [activeFilter, setActiveFilter] = useState<FilterMode>("tous");
+  const [playerDocuments, setPlayerDocuments] = useState<PlayerDocumentItem[]>(
+    [],
+  );
+  const [loadingPlayerDocuments, setLoadingPlayerDocuments] = useState(false);
+  const [reviewDocumentId, setReviewDocumentId] = useState<number | null>(
+    null,
+  );
   const [todoStats, setTodoStats] = useState({
     pendingDocuments: 0,
     upcomingMilestones: 0,
@@ -25,59 +254,120 @@ export default function AdminHomePage() {
     readyPlayers: 0,
   });
   const [stats, setStats] = useState({
-    players: 52,
-    universities: 31,
-    completed: 18,
-    ongoing: 34,
-    docsToValidate: 27,
+    players: 0,
+    universities: 0,
+    completed: 0,
+    ongoing: 0,
+    docsToValidate: 0,
   });
 
+  const loadStats = async () => {
+    setLoadingStats(true);
+    setStatsError("");
+
+    try {
+      const [home, universities, todo, notifications, playersResponse] =
+        await Promise.all([
+          getAdminHome(),
+          getAdminUniversities(),
+          getAdminTodo(),
+          getAdminNotifications(),
+          getAdminPlayers(),
+        ]);
+
+      const docsToValidate = todo.pending_documents.length;
+      const completed = playersResponse.items.filter(
+        (p) => p.progress_percentage_real >= 100,
+      ).length;
+      const ongoing = playersResponse.items.length - completed;
+
+      setStats({
+        players: home.players_count,
+        universities: universities.count,
+        completed,
+        ongoing,
+        docsToValidate: Math.max(notifications.count, docsToValidate),
+      });
+      setPlayers(playersResponse.items);
+      setSelectedPlayer((prev) => {
+        if (prev) {
+          return (
+            playersResponse.items.find((p) => p.id === prev.id) ?? prev
+          );
+        }
+        return playersResponse.items[0] ?? null;
+      });
+      setTodoStats({
+        pendingDocuments: todo.pending_documents.length,
+        upcomingMilestones: todo.upcoming_milestones.length,
+        rejectedDocuments: todo.rejected_documents.length,
+        readyPlayers: todo.ready_players.length,
+      });
+    } catch (err) {
+      setStatsError(
+        err instanceof Error ? err.message : "Erreur de chargement",
+      );
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
-    const loadStats = async () => {
-      setLoadingStats(true);
-      setStatsError("");
+    loadStats();
+  }, []);
 
+  useEffect(() => {
+    if (!selectedPlayer) {
+      setPlayerDocuments([]);
+      return;
+    }
+
+    const loadPlayerDocuments = async () => {
+      setLoadingPlayerDocuments(true);
       try {
-        const [home, universities, todo, notifications, playersResponse] =
-          await Promise.all([
-            getAdminHome(),
-            getAdminUniversities(),
-            getAdminTodo(),
-            getAdminNotifications(),
-            getAdminPlayers(),
-          ]);
-
-        const players = home.players_count;
-        const docsToValidate = todo.pending_documents.length;
-        const completed = Math.max(0, players - docsToValidate);
-        const ongoing = Math.max(0, players - completed);
-
-        setStats({
-          players,
-          universities: universities.count,
-          completed,
-          ongoing,
-          docsToValidate: Math.max(notifications.count, docsToValidate),
-        });
-        setPlayers(playersResponse.items);
-        setSelectedPlayer(playersResponse.items[0] ?? null);
-        setTodoStats({
-          pendingDocuments: todo.pending_documents.length,
-          upcomingMilestones: todo.upcoming_milestones.length,
-          rejectedDocuments: todo.rejected_documents.length,
-          readyPlayers: todo.ready_players.length,
-        });
-      } catch (err) {
-        setStatsError(
-          err instanceof Error ? err.message : "Erreur de chargement",
-        );
+        const response = await getAdminPlayerDocuments(selectedPlayer.id);
+        setPlayerDocuments(response.items);
+      } catch {
+        setPlayerDocuments([]);
       } finally {
-        setLoadingStats(false);
+        setLoadingPlayerDocuments(false);
       }
     };
 
+    loadPlayerDocuments();
+  }, [selectedPlayer?.id]);
+
+  const filteredPlayers = useMemo(() => {
+    switch (activeFilter) {
+      case "action_requise":
+        return players.filter((p) => p.documents_pending > 0);
+      case "en_attente":
+        return players.filter(
+          (p) => p.documents_pending === 0 && p.progress_percentage_real < 100,
+        );
+      case "complet":
+        return players.filter((p) => p.progress_percentage_real >= 100);
+      case "progression":
+        return [...players].sort(
+          (a, b) => b.progress_percentage_real - a.progress_percentage_real,
+        );
+      case "az":
+        return [...players].sort((a, b) =>
+          a.last_name.localeCompare(b.last_name, "fr"),
+        );
+      default:
+        return players;
+    }
+  }, [players, activeFilter]);
+
+  const handleReviewed = () => {
     loadStats();
-  }, []);
+    if (selectedPlayer) {
+      getAdminPlayerDocuments(selectedPlayer.id)
+        .then((response) => setPlayerDocuments(response.items))
+        .catch(() => {});
+    }
+  };
 
   const formatDate = (isoDate: string | null) => {
     if (!isoDate) return "Date inconnue";
@@ -86,8 +376,16 @@ export default function AdminHomePage() {
     return date.toLocaleDateString("fr-FR");
   };
 
-  const getStatus = (progress: number) => {
-    if (progress >= 80) {
+  const getStatus = (player: AdminPlayer) => {
+    if (player.documents_pending > 0) {
+      return {
+        label: "Action requise",
+        className: "bg-[#FFF3EC] text-orange-custom",
+        bar: "bg-gradient-to-r from-orange-custom to-[#e05a28]",
+      };
+    }
+
+    if (player.progress_percentage_real >= 100) {
       return {
         label: "Complet",
         className: "bg-[#E8F8F2] text-[#00876a]",
@@ -95,18 +393,10 @@ export default function AdminHomePage() {
       };
     }
 
-    if (progress >= 40) {
-      return {
-        label: "En attente",
-        className: "bg-[#EEF4FF] text-blue-custom",
-        bar: "bg-gradient-to-r from-orange-custom to-[#e05a28]",
-      };
-    }
-
     return {
-      label: "Action requise",
-      className: "bg-[#FFF3EC] text-orange-custom",
-      bar: "bg-gradient-to-r from-red-custom to-[#c53030]",
+      label: "En attente",
+      className: "bg-[#EEF4FF] text-blue-custom",
+      bar: "bg-gradient-to-r from-blue-custom to-[#3a75c4]",
     };
   };
 
@@ -128,133 +418,14 @@ export default function AdminHomePage() {
         ></div>
         <div className="flex-1 bg-card overflow-y-auto rounded-t-[20px]">
           <div className="w-10 h-1 bg-border-custom rounded-full mx-auto mt-2.5"></div>
-          <div className="bg-navy p-[18px] mt-2">
-            <div className="w-[50px] h-[50px] rounded-full bg-green-custom text-white font-syne font-extrabold text-lg flex items-center justify-center mb-2.5">
-              ND
-            </div>
-            <div className="text-white font-syne font-bold text-base">
-              Noah Djebali
-            </div>
-            <div className="text-white/50 text-xs mt-0.5">📅 30/07/2005</div>
-            <div className="text-green-custom text-xs font-medium mt-0.5">
-              🎓 Eastern Florida State College
-            </div>
-            <div className="flex items-center gap-2 mt-2.5">
-              <div className="flex-1 h-1.5 bg-white/15 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-custom rounded-full"
-                  style={{ width: "72%" }}
-                ></div>
-              </div>
-              <div className="text-white font-bold text-[13px]">72%</div>
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Documents
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-[#00876a] mb-1">
-                    ✅ Validés
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Passeport
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Relevés
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Photo
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-blue-custom mb-1">
-                    🕐 En cours
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#EEF4FF] text-blue-custom">
-                    Test anglais
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#EEF4FF] text-blue-custom">
-                    NCAA
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-red-custom mb-1">
-                    📤 À envoyer
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#FDECEC] text-red-custom">
-                    I-20
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#FDECEC] text-red-custom">
-                    Visa F1
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-1.5 flex-wrap mt-2.5">
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-green-custom text-white">
-                  ✓ Valider
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-[#FDECEC] text-red-custom">
-                  ✗ Refuser
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom">
-                  Commenter
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Messagerie
-              </div>
-              <div className="bg-sd-bg dark:bg-navy-light rounded-lg p-2.5 mb-2 text-xs max-h-[120px] overflow-y-auto">
-                <div className="mb-2 text-text-custom dark:text-white">
-                  <strong>Noah</strong>{" "}
-                  <span className="text-muted dark:text-white/60 text-[10px]">
-                    12/06 14:22
-                  </span>
-                  <br />
-                  Bonjour, j&apos;ai envoyé mes relevés de notes.
-                </div>
-                <div className="text-right text-text-custom dark:text-white">
-                  <strong className="text-green-custom">Vous</strong>{" "}
-                  <span className="text-muted dark:text-white/60 text-[10px]">
-                    12/06 15:10
-                  </span>
-                  <br />
-                  Reçus, en cours de validation !
-                </div>
-              </div>
-              <div className="flex gap-1.5 mt-2.5">
-                <input
-                  className="flex-1 px-2.5 py-2 rounded-lg border border-border-custom text-xs outline-none bg-white placeholder-muted font-inter"
-                  placeholder="Répondre à Noah…"
-                />
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-green-custom text-white">
-                  Envoyer
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Actions
-              </div>
-              <div className="flex gap-1.5 flex-wrap mt-2.5">
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom">
-                  ✏️ Modifier
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom">
-                  🏢 Changer agence
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom">
-                  📥 Télécharger
-                </button>
-              </div>
-            </div>
-          </div>
+          <PlayerDossierContent
+            player={selectedPlayer}
+            documents={playerDocuments}
+            loadingDocuments={loadingPlayerDocuments}
+            formatDate={formatDate}
+            getInitials={getInitials}
+            onOpenReview={setReviewDocumentId}
+          />
         </div>
       </div>
 
@@ -325,33 +496,33 @@ export default function AdminHomePage() {
           </div>
 
           <div className="flex gap-[7px] mb-3.5 overflow-x-auto pb-1 scbar-hidden">
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-navy bg-navy text-white rounded-full whitespace-nowrap shrink-0 transition-all">
-              Tous ({loadingStats ? "..." : players.length})
-            </div>
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-border-custom bg-white text-muted rounded-full whitespace-nowrap shrink-0 hover:bg-gray-50 transition-all">
-              ⚠ Action requise
-            </div>
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-border-custom bg-white text-muted rounded-full whitespace-nowrap shrink-0 hover:bg-gray-50 transition-all">
-              🕐 En attente
-            </div>
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-border-custom bg-white text-muted rounded-full whitespace-nowrap shrink-0 hover:bg-gray-50 transition-all">
-              ✅ Complets
-            </div>
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-border-custom bg-white text-muted rounded-full whitespace-nowrap shrink-0 hover:bg-gray-50 transition-all">
-              ↑ Progression
-            </div>
-            <div className="px-[13px] py-1 text-xs font-medium cursor-pointer border border-border-custom bg-white text-muted rounded-full whitespace-nowrap shrink-0 hover:bg-gray-50 transition-all">
-              A → Z
-            </div>
+            {FILTERS.map((filter) => (
+              <button
+                type="button"
+                key={filter.key}
+                onClick={() => setActiveFilter(filter.key)}
+                className={`px-[13px] py-1 text-xs font-medium cursor-pointer border rounded-full whitespace-nowrap shrink-0 transition-all ${
+                  activeFilter === filter.key
+                    ? "border-navy bg-navy text-white"
+                    : "border-border-custom bg-white text-muted hover:bg-gray-50"
+                }`}
+              >
+                {filter.key === "tous"
+                  ? `Tous (${loadingStats ? "..." : players.length})`
+                  : filter.label}
+              </button>
+            ))}
           </div>
 
-          {players.length === 0 ? (
+          {filteredPlayers.length === 0 ? (
             <div className="bg-card rounded-xl border border-border-custom p-4 text-sm text-muted">
-              Aucun joueur trouvé en base de données.
+              {players.length === 0
+                ? "Aucun joueur trouvé en base de données."
+                : "Aucun joueur ne correspond à ce filtre."}
             </div>
           ) : (
-            players.map((player) => {
-              const status = getStatus(player.progress_percentage);
+            filteredPlayers.map((player) => {
+              const status = getStatus(player);
               const isSelected = selectedPlayer?.id === player.id;
 
               return (
@@ -387,12 +558,12 @@ export default function AdminHomePage() {
                         <div
                           className={`h-full rounded-[3px] ${status.bar}`}
                           style={{
-                            width: `${Math.max(0, Math.min(100, player.progress_percentage))}%`,
+                            width: `${Math.max(0, Math.min(100, player.progress_percentage_real))}%`,
                           }}
                         ></div>
                       </div>
                       <div className="text-xs font-bold text-navy">
-                        {player.progress_percentage}%
+                        {player.progress_percentage_real}%
                       </div>
                     </div>
                     <div
@@ -454,145 +625,22 @@ export default function AdminHomePage() {
 
         {/* DETAIL PANEL (Desktop) */}
         <div className="hidden lg:block bg-card rounded-[14px] border border-border-custom overflow-hidden sticky top-[72px] max-h-[calc(100vh-92px)] overflow-y-auto">
-          <div className="bg-navy p-[18px]">
-            <div className="w-[50px] h-[50px] rounded-full bg-green-custom text-white font-syne font-extrabold text-lg flex items-center justify-center mb-2.5">
-              {selectedPlayer ? getInitials(selectedPlayer) : "--"}
-            </div>
-            <div className="text-white font-syne font-bold text-base">
-              {selectedPlayer
-                ? `${selectedPlayer.first_name} ${selectedPlayer.last_name}`
-                : "Aucun joueur"}
-            </div>
-            <div className="text-white/50 text-xs mt-0.5">
-              📅{" "}
-              {selectedPlayer ? formatDate(selectedPlayer.date_of_birth) : "-"}
-            </div>
-            <div className="text-green-custom text-xs font-medium mt-0.5">
-              🎓{" "}
-              {selectedPlayer?.university_name || "Université non renseignée"}
-            </div>
-            <div className="flex items-center gap-2 mt-2.5">
-              <div className="flex-1 h-[6px] bg-white/15 rounded-[3px] overflow-hidden">
-                <div
-                  className="h-full bg-green-custom rounded-[3px]"
-                  style={{
-                    width: `${Math.max(0, Math.min(100, selectedPlayer?.progress_percentage ?? 0))}%`,
-                  }}
-                ></div>
-              </div>
-              <div className="text-white font-bold text-[13px]">
-                {selectedPlayer?.progress_percentage ?? 0}%
-              </div>
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Documents
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-[#00876a] mb-1">
-                    ✅ Validés
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Passeport
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Relevés
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#E8F8F2] text-[#00876a]">
-                    Photo
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-blue-custom mb-1">
-                    🕐 En cours
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#EEF4FF] text-blue-custom">
-                    Test anglais
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#EEF4FF] text-blue-custom">
-                    NCAA
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-bold uppercase tracking-[0.5px] text-red-custom mb-1">
-                    📤 À envoyer
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#FDECEC] text-red-custom">
-                    I-20
-                  </div>
-                  <div className="rounded-md px-1.5 py-1 text-[11px] mb-1 bg-[#FDECEC] text-red-custom">
-                    Visa F1
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-1.5 flex-wrap mt-2.5">
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-green-custom text-white">
-                  ✓ Valider
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-[#FDECEC] text-red-custom">
-                  ✗ Refuser
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
-                  Commenter
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Messagerie
-              </div>
-              <div className="bg-sd-bg dark:bg-navy-light rounded-lg p-2.5 mb-2 text-xs max-h-[120px] overflow-y-auto">
-                <div className="mb-2 text-text-custom dark:text-white">
-                  <strong>Noah</strong>{" "}
-                  <span className="text-muted dark:text-white/60 text-[10px]">
-                    12/06 14:22
-                  </span>
-                  <br />
-                  Bonjour, j&apos;ai envoyé mes relevés de notes.
-                </div>
-                <div className="text-right text-text-custom dark:text-white">
-                  <strong className="text-green-custom">Vous</strong>{" "}
-                  <span className="text-muted dark:text-white/60 text-[10px]">
-                    12/06 15:10
-                  </span>
-                  <br />
-                  Reçus, en cours de validation !
-                </div>
-              </div>
-              <div className="flex gap-1.5 mt-2.5">
-                <input
-                  className="flex-1 px-2.5 py-2 rounded-lg border border-border-custom text-xs outline-none bg-white placeholder-muted font-inter"
-                  placeholder="Répondre à Noah…"
-                />
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border-none bg-green-custom text-white">
-                  Envoyer
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3.5">
-              <div className="font-syne text-[11px] font-bold uppercase tracking-[0.8px] text-muted mb-2">
-                Actions rapides
-              </div>
-              <div className="flex gap-1.5 flex-wrap mt-2.5">
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
-                  ✏️ Modifier
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
-                  🏢 Changer
-                </button>
-                <button className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border-custom bg-transparent text-text-custom hover:bg-gray-50">
-                  📥 Télécharger
-                </button>
-              </div>
-            </div>
-          </div>
+          <PlayerDossierContent
+            player={selectedPlayer}
+            documents={playerDocuments}
+            loadingDocuments={loadingPlayerDocuments}
+            formatDate={formatDate}
+            getInitials={getInitials}
+            onOpenReview={setReviewDocumentId}
+          />
         </div>
       </div>
+
+      <DocumentReviewModal
+        documentId={reviewDocumentId}
+        onClose={() => setReviewDocumentId(null)}
+        onReviewed={handleReviewed}
+      />
     </>
   );
 }

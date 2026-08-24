@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import schemas
@@ -50,8 +51,38 @@ def admin_players(admin_user_id: int | None = None, db: Session = Depends(get_db
         )
         universities = {u.id: u.name for u in university_rows}
 
+    from app.routers.player import _get_applicable_document_templates
+
+    documents_by_player: dict[int, list[models.Document]] = {}
+    if players:
+        all_documents = (
+            db.query(models.Document)
+            .filter(models.Document.player_id.in_([p.id for p in players]))
+            .all()
+        )
+        for doc in all_documents:
+            documents_by_player.setdefault(doc.player_id, []).append(doc)
+
     items = []
     for player, user in player_rows:
+        templates = _get_applicable_document_templates(player, db)
+        template_ids = {t.id for t in templates}
+        player_documents = [
+            doc
+            for doc in documents_by_player.get(player.id, [])
+            if doc.document_template_id in template_ids
+        ]
+        documents_total = len(templates)
+        documents_validated = sum(
+            1 for doc in player_documents if doc.status == models.DocStatusEnum.VALIDATED
+        )
+        documents_pending = sum(
+            1 for doc in player_documents if doc.status == models.DocStatusEnum.PENDING
+        )
+        progress_percentage_real = (
+            round(documents_validated / documents_total * 100) if documents_total > 0 else 0
+        )
+
         items.append(
             {
                 "id": player.id,
@@ -68,9 +99,53 @@ def admin_players(admin_user_id: int | None = None, db: Session = Depends(get_db
                 "service_plan": player.service_plan or "Formule A",
                 "acquisition_channel": player.acquisition_channel or "formulaire",
                 "intake_period": player.intake_period or "Fall",
+                "pending_documents_count": documents_pending,
+                "documents_total": documents_total,
+                "documents_validated": documents_validated,
+                "documents_pending": documents_pending,
+                "progress_percentage_real": progress_percentage_real,
             }
         )
 
+    return {"count": len(items), "items": items}
+
+
+@router.get("/joueurs/{player_id}/documents")
+def admin_player_documents(player_id: int, db: Session = Depends(get_db)):
+    from app.routers.player import (
+        _get_applicable_document_templates,
+        _serialize_player_document,
+    )
+
+    profile = (
+        db.query(models.PlayerProfile)
+        .filter(models.PlayerProfile.id == player_id)
+        .first()
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    templates = _get_applicable_document_templates(profile, db)
+    template_ids = [template.id for template in templates]
+
+    existing_documents = (
+        db.query(models.Document)
+        .filter(
+            models.Document.player_id == profile.id,
+            models.Document.document_template_id.in_(template_ids),
+        )
+        .all()
+        if template_ids
+        else []
+    )
+    documents_by_template = {
+        document.document_template_id: document for document in existing_documents
+    }
+
+    items = [
+        _serialize_player_document(template, documents_by_template.get(template.id))
+        for template in templates
+    ]
     return {"count": len(items), "items": items}
 
 
@@ -324,12 +399,41 @@ def delete_admin_document_template(
 
 
 @router.get("/todo")
-def admin_todo(db: Session = Depends(get_db)):
-    pending_documents = (
-        db.query(models.Document)
+def admin_todo(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+    pending_query = (
+        db.query(models.Document, models.PlayerProfile, models.User, models.DocumentTemplate)
+        .join(models.PlayerProfile, models.Document.player_id == models.PlayerProfile.id)
+        .join(models.User, models.PlayerProfile.user_id == models.User.id)
+        .join(
+            models.DocumentTemplate,
+            models.Document.document_template_id == models.DocumentTemplate.id,
+        )
         .filter(models.Document.status == models.DocStatusEnum.PENDING)
-        .all()
     )
+
+    if admin_user_id is not None:
+        admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
+        if (
+            admin_user
+            and admin_user.role == models.RoleEnum.ADMIN
+            and admin_user.agency_id is not None
+        ):
+            pending_query = pending_query.filter(models.User.agency_id == admin_user.agency_id)
+
+    pending_rows = pending_query.order_by(models.Document.updated_at.asc()).all()
+    pending_documents = [
+        {
+            "document_id": document.id,
+            "player_id": player.id,
+            "player_name": f"{player.first_name} {player.last_name}",
+            "document_template_id": template.id,
+            "document_name": template.name,
+            "category": template.category,
+            "submitted_at": document.updated_at.isoformat() if document.updated_at else None,
+        }
+        for document, player, user, template in pending_rows
+    ]
+
     upcoming_milestones = (
         db.query(models.Milestone)
         .filter(models.Milestone.status == models.MilestoneStatusEnum.UPCOMING)
@@ -354,9 +458,24 @@ def admin_todo(db: Session = Depends(get_db)):
 
 
 @router.get("/notifications")
-def admin_notifications(db: Session = Depends(get_db)):
-    notifications = db.query(models.Notification).order_by(models.Notification.created_at.desc()).all()
-    return {"count": len(notifications), "items": notifications}
+def admin_notifications(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(models.Notification)
+    if admin_user_id is not None:
+        query = query.filter(models.Notification.user_id == admin_user_id)
+
+    notifications = query.order_by(models.Notification.created_at.desc()).all()
+    items = [
+        {
+            "id": n.id,
+            "title": n.title,
+            "content": n.content,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "related_document_id": n.related_document_id,
+        }
+        for n in notifications
+    ]
+    return {"count": len(items), "items": items}
 
 
 @router.get("/messages")

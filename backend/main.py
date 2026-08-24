@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.database import engine
@@ -13,6 +14,28 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Soccer Duty API")
 
+
+# Filet de sécurité : une exception non attrapée dans une route (ex: SQLite
+# "database is locked" le temps d'un accès concurrent) laisse normalement
+# Starlette générer sa propre réponse 500 générique via ServerErrorMiddleware,
+# qui se situe EN DEHORS de CORSMiddleware — la réponse part donc sans les
+# en-têtes CORS, le navigateur la bloque et fetch() échoue avec "Failed to
+# fetch" au lieu de montrer la vraie erreur. Un @app.exception_handler(Exception)
+# ne suffit pas ici : Starlette le déplace lui aussi dans ServerErrorMiddleware.
+# La seule façon de rester à l'intérieur de CORSMiddleware est d'attraper
+# l'exception dans un middleware déclaré AVANT lui (l'ordre d'ajout compte :
+# le dernier ajouté devient le plus extérieur).
+@app.middleware("http")
+async def catch_unhandled_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Erreur interne du serveur. Réessayez dans quelques instants."},
+        )
+
+
 # --- Configuration du CORS ---
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +46,10 @@ app.add_middleware(
 )
 
 # --- Fichiers uploadés par les joueurs (stockage local, pas de cloud configuré) ---
-UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+# Hors de backend/ volontairement : uvicorn --reload surveille tout son
+# répertoire de travail et redémarrait le serveur au moindre fichier
+# uploadé, coupant la requête avant que la réponse soit renvoyée.
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 

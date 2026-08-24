@@ -49,6 +49,11 @@ export type AdminPlayer = {
     | "Bouche à oreille"
     | "Formulaire";
   intake_period: "Spring" | "Fall";
+  pending_documents_count: number;
+  documents_total: number;
+  documents_validated: number;
+  documents_pending: number;
+  progress_percentage_real: number;
 };
 
 export type UpdateAdminPlayerPayload = {
@@ -341,13 +346,27 @@ export async function deleteDocumentTemplate(
   );
 }
 
-export async function getAdminTodo() {
+export type AdminPendingDocument = {
+  document_id: number;
+  player_id: number;
+  player_name: string;
+  document_template_id: number;
+  document_name: string;
+  category: DocumentCategory;
+  submitted_at: string | null;
+};
+
+export async function getAdminTodo(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
   return apiFetch<{
-    pending_documents: Array<{ id: number }>;
+    pending_documents: AdminPendingDocument[];
     upcoming_milestones: Array<{ id: number }>;
     rejected_documents: Array<{ id: number }>;
     ready_players: Array<{ id: number }>;
-  }>("/admin/todo");
+  }>(`/admin/todo${query}`);
 }
 
 export async function getAdminPlayers(adminUserId?: number | null) {
@@ -356,6 +375,12 @@ export async function getAdminPlayers(adminUserId?: number | null) {
       ? `?admin_user_id=${adminUserId}`
       : "";
   return apiFetch<ListResponse<AdminPlayer>>(`/admin/joueurs${query}`);
+}
+
+export async function getAdminPlayerDocuments(playerId: number) {
+  return apiFetch<ListResponse<PlayerDocumentItem>>(
+    `/admin/joueurs/${playerId}/documents`,
+  );
 }
 
 export async function updateAdminPlayer(
@@ -375,8 +400,68 @@ export async function updateAdminPlayer(
   );
 }
 
-export async function getAdminNotifications() {
-  return apiFetch<ListResponse<{ id: number }>>("/admin/notifications");
+export type AdminNotification = {
+  id: number;
+  title: string;
+  content: string;
+  is_read: boolean;
+  created_at: string | null;
+  related_document_id: number | null;
+};
+
+export async function getAdminNotifications(adminUserId?: number | null) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<ListResponse<AdminNotification>>(
+    `/admin/notifications${query}`,
+  );
+}
+
+export type DocumentReviewStatus = "VALIDATED" | "REJECTED";
+
+export type DocumentReviewDetail = {
+  document_id: number;
+  status: PlayerDocumentStatus;
+  file_url: string | null;
+  admin_comment: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  submitted_at: string | null;
+  player_id: number;
+  player_name: string;
+  document_template_id: number;
+  document_name: string;
+  category: DocumentCategory;
+  description_for_player: string | null;
+  external_url: string | null;
+};
+
+export async function getDocumentReview(
+  documentId: number,
+  adminUserId?: number | null,
+) {
+  const query =
+    adminUserId && Number.isFinite(adminUserId)
+      ? `?admin_user_id=${adminUserId}`
+      : "";
+  return apiFetch<DocumentReviewDetail>(`/documents/${documentId}${query}`);
+}
+
+export async function reviewDocument(
+  documentId: number,
+  payload: { status: DocumentReviewStatus; admin_comment: string | null },
+  adminUserId: number,
+) {
+  return apiFetch<DocumentReviewDetail>(
+    `/documents/${documentId}/review?admin_user_id=${adminUserId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function getPlayerDossier(userId: number) {
@@ -417,6 +502,7 @@ export type PlayerDocumentItem = {
   document_id: number | null;
   status: PlayerDocumentStatus;
   file_url: string | null;
+  admin_comment: string | null;
   updated_at: string | null;
 };
 

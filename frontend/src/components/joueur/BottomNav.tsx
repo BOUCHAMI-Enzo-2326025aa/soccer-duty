@@ -12,7 +12,6 @@ export default function BottomNav({
 
   const navItems = [
     { name: "Dossier", icon: "📂", path: "/joueur" },
-    { name: "Documents", icon: "📄", path: "/joueur/documents", badge: 2 },
     { name: "Messages", icon: "💬", path: "/joueur/messages" },
     { name: "IA", icon: "🤖", path: "/joueur/ia" },
   ];
@@ -34,11 +33,6 @@ export default function BottomNav({
             >
               <div className="text-xl leading-none">{item.icon}</div>
               <div className="text-[10px] font-medium">{item.name}</div>
-              {item.badge && (
-                <div className="absolute top-0 right-1 bg-orange-custom text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">
-                  {item.badge}
-                </div>
-              )}
             </Link>
           );
         })}

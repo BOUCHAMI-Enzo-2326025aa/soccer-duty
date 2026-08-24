@@ -73,6 +73,7 @@ def _serialize_player_document(
         "document_id": document.id if document else None,
         "status": document.status if document else models.DocStatusEnum.MISSING,
         "file_url": document.s3_url if document else None,
+        "admin_comment": document.admin_comment if document else None,
         "updated_at": document.updated_at.isoformat()
         if document and document.updated_at
         else None,
