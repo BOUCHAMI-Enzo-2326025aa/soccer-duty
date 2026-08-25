@@ -118,8 +118,8 @@ export default function AdminPlayersPage() {
 
       setAdminUserId(userId);
       const [response, todo] = await Promise.all([
-        getAdminPlayers(userId),
-        getAdminTodo(userId),
+        getAdminPlayers(),
+        getAdminTodo(),
       ]);
       setPlayers(response.items);
       setPendingDocuments(todo.pending_documents);
@@ -190,7 +190,7 @@ export default function AdminPlayersPage() {
         intake_period: row.periode,
       };
 
-      const updated = await updateAdminPlayer(playerId, payload, adminUserId);
+      const updated = await updateAdminPlayer(playerId, payload);
 
       setPlayers((prev) =>
         prev.map((player) => (player.id === playerId ? updated : player)),

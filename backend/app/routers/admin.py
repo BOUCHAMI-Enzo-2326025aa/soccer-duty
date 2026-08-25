@@ -5,38 +5,68 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.database import get_db
 from app.models import models
+from app.security import get_current_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def _require_admin(current_user: models.User) -> None:
+    if current_user.role not in (models.RoleEnum.ADMIN, models.RoleEnum.SUPER_ADMIN):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+
+
+def _agency_scope(current_user: models.User) -> int | None:
+    """Renvoie l'agence sur laquelle scoper les requêtes, ou None si l'admin
+    voit tout (SUPER_ADMIN, ou ADMIN sans agence assignée)."""
+    if current_user.role == models.RoleEnum.ADMIN and current_user.agency_id is not None:
+        return current_user.agency_id
+    return None
+
+
 @router.get("/accueil")
-def admin_home(db: Session = Depends(get_db)):
-    users_count = db.query(models.User).count()
-    players_count = db.query(models.PlayerProfile).count()
-    docs_count = db.query(models.Document).count()
+def admin_home(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    agency_id = _agency_scope(current_user)
+
+    users_query = db.query(models.User)
+    players_query = db.query(models.PlayerProfile).join(
+        models.User, models.PlayerProfile.user_id == models.User.id
+    )
+    docs_query = (
+        db.query(models.Document)
+        .join(models.PlayerProfile, models.Document.player_id == models.PlayerProfile.id)
+        .join(models.User, models.PlayerProfile.user_id == models.User.id)
+    )
+    if agency_id is not None:
+        users_query = users_query.filter(models.User.agency_id == agency_id)
+        players_query = players_query.filter(models.User.agency_id == agency_id)
+        docs_query = docs_query.filter(models.User.agency_id == agency_id)
+
     return {
-        "users_count": users_count,
-        "players_count": players_count,
-        "documents_count": docs_count,
+        "users_count": users_query.count(),
+        "players_count": players_query.count(),
+        "documents_count": docs_query.count(),
     }
 
 
 @router.get("/joueurs")
-def admin_players(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+def admin_players(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
     query = (
         db.query(models.PlayerProfile, models.User)
         .join(models.User, models.PlayerProfile.user_id == models.User.id)
         .filter(models.User.role == models.RoleEnum.PLAYER)
     )
 
-    if admin_user_id is not None:
-        admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-        if (
-            admin_user
-            and admin_user.role == models.RoleEnum.ADMIN
-            and admin_user.agency_id is not None
-        ):
-            query = query.filter(models.User.agency_id == admin_user.agency_id)
+    agency_id = _agency_scope(current_user)
+    if agency_id is not None:
+        query = query.filter(models.User.agency_id == agency_id)
 
     player_rows = query.order_by(models.PlayerProfile.progress_percentage.desc()).all()
     players = [player for player, _ in player_rows]
@@ -110,8 +140,22 @@ def admin_players(admin_user_id: int | None = None, db: Session = Depends(get_db
     return {"count": len(items), "items": items}
 
 
+def _assert_player_in_scope(current_user: models.User, profile: models.PlayerProfile) -> None:
+    agency_id = _agency_scope(current_user)
+    if agency_id is None:
+        return
+    player_agency_id = profile.user.agency_id if profile.user else None
+    if player_agency_id != agency_id:
+        raise HTTPException(status_code=403, detail="Player is outside your agency")
+
+
 @router.get("/joueurs/{player_id}/documents")
-def admin_player_documents(player_id: int, db: Session = Depends(get_db)):
+def admin_player_documents(
+    player_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
     from app.routers.player import (
         _get_applicable_document_templates,
         _serialize_player_document,
@@ -124,6 +168,7 @@ def admin_player_documents(player_id: int, db: Session = Depends(get_db)):
     )
     if not profile:
         raise HTTPException(status_code=404, detail="Player not found")
+    _assert_player_in_scope(current_user, profile)
 
     templates = _get_applicable_document_templates(profile, db)
     template_ids = [template.id for template in templates]
@@ -153,12 +198,10 @@ def admin_player_documents(player_id: int, db: Session = Depends(get_db)):
 def update_admin_player(
     player_id: int,
     payload: schemas.AdminPlayerUpdate,
-    admin_user_id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-    if not admin_user:
-        raise HTTPException(status_code=404, detail="Admin user not found")
+    _require_admin(current_user)
 
     row = (
         db.query(models.PlayerProfile, models.User)
@@ -171,11 +214,8 @@ def update_admin_player(
 
     player_profile, player_user = row
 
-    if (
-        admin_user.role == models.RoleEnum.ADMIN
-        and admin_user.agency_id is not None
-        and player_user.agency_id != admin_user.agency_id
-    ):
+    agency_id = _agency_scope(current_user)
+    if agency_id is not None and player_user.agency_id != agency_id:
         raise HTTPException(status_code=403, detail="Player is outside your agency")
 
     player_profile.phone = payload.phone
@@ -218,7 +258,11 @@ def update_admin_player(
 
 
 @router.get("/universites")
-def admin_universities(db: Session = Depends(get_db)):
+def admin_universities(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
     universities = db.query(models.University).all()
     return {"count": len(universities), "items": universities}
 
@@ -253,21 +297,14 @@ def _serialize_document_template(template: models.DocumentTemplate) -> dict:
     }
 
 
-def _get_admin_user_or_404(admin_user_id: int, db: Session) -> models.User:
-    admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-    if not admin_user:
-        raise HTTPException(status_code=404, detail="Admin user not found")
-    return admin_user
-
-
 def _assert_document_template_in_scope(
     admin_user: models.User, template: models.DocumentTemplate
 ) -> None:
+    agency_id = _agency_scope(admin_user)
     if (
-        admin_user.role == models.RoleEnum.ADMIN
-        and admin_user.agency_id is not None
+        agency_id is not None
         and template.agency_id is not None
-        and template.agency_id != admin_user.agency_id
+        and template.agency_id != agency_id
     ):
         raise HTTPException(status_code=403, detail="Document template is outside your agency")
 
@@ -289,20 +326,19 @@ def _resolve_target_universities(
 
 
 @router.get("/documents")
-def admin_document_templates(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+def admin_document_templates(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
     query = db.query(models.DocumentTemplate)
 
-    if admin_user_id is not None:
-        admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-        if (
-            admin_user
-            and admin_user.role == models.RoleEnum.ADMIN
-            and admin_user.agency_id is not None
-        ):
-            query = query.filter(
-                (models.DocumentTemplate.agency_id == admin_user.agency_id)
-                | (models.DocumentTemplate.agency_id.is_(None))
-            )
+    agency_id = _agency_scope(current_user)
+    if agency_id is not None:
+        query = query.filter(
+            (models.DocumentTemplate.agency_id == agency_id)
+            | (models.DocumentTemplate.agency_id.is_(None))
+        )
 
     templates = query.order_by(models.DocumentTemplate.id).all()
     items = [_serialize_document_template(template) for template in templates]
@@ -312,14 +348,14 @@ def admin_document_templates(admin_user_id: int | None = None, db: Session = Dep
 @router.post("/documents")
 def create_admin_document_template(
     payload: schemas.AdminDocumentTemplateSave,
-    admin_user_id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    admin_user = _get_admin_user_or_404(admin_user_id, db)
+    _require_admin(current_user)
     target_universities = _resolve_target_universities(payload.target_university_ids, db)
 
     template = models.DocumentTemplate(
-        agency_id=admin_user.agency_id,
+        agency_id=current_user.agency_id,
         name=payload.name,
         category=payload.category,
         description_for_player=payload.description_for_player,
@@ -342,10 +378,10 @@ def create_admin_document_template(
 def update_admin_document_template(
     template_id: int,
     payload: schemas.AdminDocumentTemplateSave,
-    admin_user_id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    admin_user = _get_admin_user_or_404(admin_user_id, db)
+    _require_admin(current_user)
 
     template = (
         db.query(models.DocumentTemplate)
@@ -355,7 +391,7 @@ def update_admin_document_template(
     if not template:
         raise HTTPException(status_code=404, detail="Document template not found")
 
-    _assert_document_template_in_scope(admin_user, template)
+    _assert_document_template_in_scope(current_user, template)
     target_universities = _resolve_target_universities(payload.target_university_ids, db)
 
     template.name = payload.name
@@ -378,10 +414,10 @@ def update_admin_document_template(
 @router.delete("/documents/{template_id}")
 def delete_admin_document_template(
     template_id: int,
-    admin_user_id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    admin_user = _get_admin_user_or_404(admin_user_id, db)
+    _require_admin(current_user)
 
     template = (
         db.query(models.DocumentTemplate)
@@ -391,7 +427,7 @@ def delete_admin_document_template(
     if not template:
         raise HTTPException(status_code=404, detail="Document template not found")
 
-    _assert_document_template_in_scope(admin_user, template)
+    _assert_document_template_in_scope(current_user, template)
 
     db.delete(template)
     db.commit()
@@ -399,7 +435,11 @@ def delete_admin_document_template(
 
 
 @router.get("/todo")
-def admin_todo(admin_user_id: int | None = None, db: Session = Depends(get_db)):
+def admin_todo(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
     pending_query = (
         db.query(models.Document, models.PlayerProfile, models.User, models.DocumentTemplate)
         .join(models.PlayerProfile, models.Document.player_id == models.PlayerProfile.id)
@@ -411,14 +451,9 @@ def admin_todo(admin_user_id: int | None = None, db: Session = Depends(get_db)):
         .filter(models.Document.status == models.DocStatusEnum.PENDING)
     )
 
-    if admin_user_id is not None:
-        admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-        if (
-            admin_user
-            and admin_user.role == models.RoleEnum.ADMIN
-            and admin_user.agency_id is not None
-        ):
-            pending_query = pending_query.filter(models.User.agency_id == admin_user.agency_id)
+    agency_id = _agency_scope(current_user)
+    if agency_id is not None:
+        pending_query = pending_query.filter(models.User.agency_id == agency_id)
 
     pending_rows = pending_query.order_by(models.Document.updated_at.asc()).all()
     pending_documents = [
@@ -458,12 +493,17 @@ def admin_todo(admin_user_id: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/notifications")
-def admin_notifications(admin_user_id: int | None = None, db: Session = Depends(get_db)):
-    query = db.query(models.Notification)
-    if admin_user_id is not None:
-        query = query.filter(models.Notification.user_id == admin_user_id)
-
-    notifications = query.order_by(models.Notification.created_at.desc()).all()
+def admin_notifications(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    notifications = (
+        db.query(models.Notification)
+        .filter(models.Notification.user_id == current_user.id)
+        .order_by(models.Notification.created_at.desc())
+        .all()
+    )
     items = [
         {
             "id": n.id,
@@ -478,43 +518,3 @@ def admin_notifications(admin_user_id: int | None = None, db: Session = Depends(
     return {"count": len(items), "items": items}
 
 
-@router.get("/messages")
-def admin_messages(db: Session = Depends(get_db)):
-    conversations = db.query(models.Conversation).order_by(models.Conversation.created_at.desc()).all()
-    return {"count": len(conversations), "items": conversations}
-
-
-@router.get("/ia")
-def admin_ai_assistant():
-    return {
-        "assistant": "Soccer Duty AI",
-        "features": [
-            "Document pre-check",
-            "Player question support",
-            "Priority suggestion",
-        ],
-    }
-
-
-@router.get("/aide")
-def admin_help():
-    return {
-        "title": "Admin help",
-        "topics": [
-            "Validate documents",
-            "Manage players",
-            "Manage templates",
-        ],
-    }
-
-
-@router.get("/parametres")
-def admin_settings():
-    return {
-        "application": "Soccer Duty",
-        "version": "1.0",
-        "security": {
-            "auth": "cookie",
-            "token": "fake-token-dev-only",
-        },
-    }

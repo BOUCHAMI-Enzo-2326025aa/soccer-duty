@@ -299,51 +299,35 @@ export type SaveDocumentTemplatePayload = {
   delay_processing_days: number | null;
 };
 
-export async function getAdminDocumentTemplates(adminUserId?: number | null) {
-  const query =
-    adminUserId && Number.isFinite(adminUserId)
-      ? `?admin_user_id=${adminUserId}`
-      : "";
-  return apiFetch<ListResponse<DocumentTemplate>>(`/admin/documents${query}`);
+export async function getAdminDocumentTemplates() {
+  return apiFetch<ListResponse<DocumentTemplate>>("/admin/documents");
 }
 
 export async function createDocumentTemplate(
   payload: SaveDocumentTemplatePayload,
-  adminUserId: number,
 ) {
-  return apiFetch<DocumentTemplate>(
-    `/admin/documents?admin_user_id=${adminUserId}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
+  return apiFetch<DocumentTemplate>("/admin/documents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function updateDocumentTemplate(
   templateId: number,
   payload: SaveDocumentTemplatePayload,
-  adminUserId: number,
 ) {
-  return apiFetch<DocumentTemplate>(
-    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
+  return apiFetch<DocumentTemplate>(`/admin/documents/${templateId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
-export async function deleteDocumentTemplate(
-  templateId: number,
-  adminUserId: number,
-) {
-  return apiFetch<{ message: string }>(
-    `/admin/documents/${templateId}?admin_user_id=${adminUserId}`,
-    { method: "DELETE" },
-  );
+export async function deleteDocumentTemplate(templateId: number) {
+  return apiFetch<{ message: string }>(`/admin/documents/${templateId}`, {
+    method: "DELETE",
+  });
 }
 
 export type AdminPendingDocument = {
@@ -356,25 +340,17 @@ export type AdminPendingDocument = {
   submitted_at: string | null;
 };
 
-export async function getAdminTodo(adminUserId?: number | null) {
-  const query =
-    adminUserId && Number.isFinite(adminUserId)
-      ? `?admin_user_id=${adminUserId}`
-      : "";
+export async function getAdminTodo() {
   return apiFetch<{
     pending_documents: AdminPendingDocument[];
     upcoming_milestones: Array<{ id: number }>;
     rejected_documents: Array<{ id: number }>;
     ready_players: Array<{ id: number }>;
-  }>(`/admin/todo${query}`);
+  }>("/admin/todo");
 }
 
-export async function getAdminPlayers(adminUserId?: number | null) {
-  const query =
-    adminUserId && Number.isFinite(adminUserId)
-      ? `?admin_user_id=${adminUserId}`
-      : "";
-  return apiFetch<ListResponse<AdminPlayer>>(`/admin/joueurs${query}`);
+export async function getAdminPlayers() {
+  return apiFetch<ListResponse<AdminPlayer>>("/admin/joueurs");
 }
 
 export async function getAdminPlayerDocuments(playerId: number) {
@@ -386,18 +362,14 @@ export async function getAdminPlayerDocuments(playerId: number) {
 export async function updateAdminPlayer(
   playerId: number,
   payload: UpdateAdminPlayerPayload,
-  adminUserId: number,
 ) {
-  return apiFetch<AdminPlayer>(
-    `/admin/joueurs/${playerId}?admin_user_id=${adminUserId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+  return apiFetch<AdminPlayer>(`/admin/joueurs/${playerId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 }
 
 export type AdminNotification = {
@@ -409,14 +381,8 @@ export type AdminNotification = {
   related_document_id: number | null;
 };
 
-export async function getAdminNotifications(adminUserId?: number | null) {
-  const query =
-    adminUserId && Number.isFinite(adminUserId)
-      ? `?admin_user_id=${adminUserId}`
-      : "";
-  return apiFetch<ListResponse<AdminNotification>>(
-    `/admin/notifications${query}`,
-  );
+export async function getAdminNotifications() {
+  return apiFetch<ListResponse<AdminNotification>>("/admin/notifications");
 }
 
 export type PlayerNotification = AdminNotification;
@@ -475,30 +441,19 @@ export type DocumentReviewDetail = {
   external_url: string | null;
 };
 
-export async function getDocumentReview(
-  documentId: number,
-  adminUserId?: number | null,
-) {
-  const query =
-    adminUserId && Number.isFinite(adminUserId)
-      ? `?admin_user_id=${adminUserId}`
-      : "";
-  return apiFetch<DocumentReviewDetail>(`/documents/${documentId}${query}`);
+export async function getDocumentReview(documentId: number) {
+  return apiFetch<DocumentReviewDetail>(`/documents/${documentId}`);
 }
 
 export async function reviewDocument(
   documentId: number,
   payload: { status: DocumentReviewStatus; admin_comment: string | null },
-  adminUserId: number,
 ) {
-  return apiFetch<DocumentReviewDetail>(
-    `/documents/${documentId}/review?admin_user_id=${adminUserId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
+  return apiFetch<DocumentReviewDetail>(`/documents/${documentId}/review`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getPlayerDossier(userId: number) {

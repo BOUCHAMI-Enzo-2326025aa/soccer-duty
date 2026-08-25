@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getAdminNotifications,
-  getUserIdFromCookie,
-  type AdminNotification,
-} from "@/lib/api";
+import { getAdminNotifications, type AdminNotification } from "@/lib/api";
 import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
 
 export default function AdminNotificationsPage() {
@@ -22,8 +18,7 @@ export default function AdminNotificationsPage() {
     setError("");
 
     try {
-      const adminUserId = getUserIdFromCookie();
-      const response = await getAdminNotifications(adminUserId);
+      const response = await getAdminNotifications();
       setNotifications(response.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de chargement");

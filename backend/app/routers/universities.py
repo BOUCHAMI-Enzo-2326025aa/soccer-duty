@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import models
+from app.security import get_current_user
 
 router = APIRouter(prefix="/universities", tags=["universities"])
 
@@ -21,7 +22,14 @@ class UniversityCreate(BaseModel):
 
 
 @router.post("/")
-def create_university(payload: UniversityCreate, db: Session = Depends(get_db)):
+def create_university(
+    payload: UniversityCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role not in (models.RoleEnum.ADMIN, models.RoleEnum.SUPER_ADMIN):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+
     item = models.University(
         name=payload.name,
         state=payload.state,
@@ -36,18 +44,4 @@ def create_university(payload: UniversityCreate, db: Session = Depends(get_db)):
     db.add(item)
     db.commit()
     db.refresh(item)
-    return item
-
-
-@router.get("/")
-def list_universities(db: Session = Depends(get_db)):
-    items = db.query(models.University).all()
-    return {"count": len(items), "items": items}
-
-
-@router.get("/{university_id}")
-def get_university(university_id: int, db: Session = Depends(get_db)):
-    item = db.query(models.University).filter(models.University.id == university_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="University not found")
     return item

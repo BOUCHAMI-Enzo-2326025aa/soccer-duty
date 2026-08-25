@@ -4,8 +4,18 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import models
+from app.security import get_current_user
 
 router = APIRouter(prefix="/player", tags=["player"])
+
+
+def _require_self(user_id: int, current_user: models.User) -> None:
+    """Un joueur ne peut consulter que son propre dossier — l'identité vient
+    du token vérifié, le {user_id} de l'URL n'est plus qu'une confirmation."""
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=403, detail="Vous ne pouvez consulter que votre propre dossier"
+        )
 
 
 def _get_applicable_document_templates(
@@ -96,7 +106,12 @@ def _get_profile_from_user(user_id: int, db: Session) -> models.PlayerProfile:
 
 
 @router.get("/dossier/{user_id}")
-def player_dossier(user_id: int, db: Session = Depends(get_db)):
+def player_dossier(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
     profile = _get_profile_from_user(user_id, db)
     documents = db.query(models.Document).filter(models.Document.player_id == profile.id).all()
     milestones = (
@@ -118,7 +133,12 @@ def player_dossier(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/profil/{user_id}")
-def player_profile(user_id: int, db: Session = Depends(get_db)):
+def player_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
     profile = _get_profile_from_user(user_id, db)
     university = None
     if profile.university_id:
@@ -135,7 +155,12 @@ def player_profile(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/documents/{user_id}")
-def player_documents(user_id: int, db: Session = Depends(get_db)):
+def player_documents(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
     profile = _get_profile_from_user(user_id, db)
 
     templates = _get_applicable_document_templates(profile, db)
@@ -163,7 +188,12 @@ def player_documents(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/notifications/{user_id}")
-def player_notifications(user_id: int, db: Session = Depends(get_db)):
+def player_notifications(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
     _get_profile_from_user(user_id, db)  # 404 si l'utilisateur n'est pas un joueur valide
 
     notifications = (
@@ -187,7 +217,12 @@ def player_notifications(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/messages/{user_id}")
-def player_messages(user_id: int, db: Session = Depends(get_db)):
+def player_messages(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
     profile = _get_profile_from_user(user_id, db)
     conversations = (
         db.query(models.Conversation)

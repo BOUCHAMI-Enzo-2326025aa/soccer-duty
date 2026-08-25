@@ -9,7 +9,6 @@ import {
   getAdminPlayers,
   getAdminTodo,
   getAdminUniversities,
-  getUserIdFromCookie,
   logout,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -42,7 +41,6 @@ export default function AdminSidebar({
   useEffect(() => {
     const loadCounts = async () => {
       try {
-        const userId = getUserIdFromCookie();
         const [
           playersResponse,
           universitiesResponse,
@@ -50,11 +48,11 @@ export default function AdminSidebar({
           todoResponse,
           notificationsResponse,
         ] = await Promise.all([
-          getAdminPlayers(userId ?? undefined),
+          getAdminPlayers(),
           getAdminUniversities(),
-          getAdminDocumentTemplates(userId ?? undefined),
-          getAdminTodo(userId ?? undefined),
-          getAdminNotifications(userId ?? undefined),
+          getAdminDocumentTemplates(),
+          getAdminTodo(),
+          getAdminNotifications(),
         ]);
         setCounts({
           players: playersResponse.count,
