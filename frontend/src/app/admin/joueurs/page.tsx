@@ -56,6 +56,48 @@ const CANAL_OPTIONS: CanalOption[] = [
 ];
 const PERIODE_OPTIONS: PeriodeOption[] = ["Spring", "Fall"];
 
+const INITIALS_STOPWORDS = new Set([
+  "of",
+  "the",
+  "and",
+  "de",
+  "des",
+  "du",
+  "la",
+  "le",
+  "les",
+]);
+
+function getInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+
+  const words = trimmed.replace(/[(),]/g, " ").split(/\s+/).filter(Boolean);
+
+  // Un mot deja tout en majuscules ("UCLA", "NYU", "IMT") est un abrege
+  // fourni par l'etablissement lui-meme : on le reprend tel quel (jusqu'a
+  // 4 lettres) plutot que d'en tirer des initiales artificielles.
+  const acronym = words.find((word) => {
+    const letters = word.replace(/[^A-Za-z]/g, "");
+    return letters.length >= 2 && letters === letters.toUpperCase();
+  });
+  if (acronym) {
+    const letters = acronym.replace(/[^A-Za-z]/g, "");
+    return letters.length <= 4 ? letters : letters.slice(0, 2);
+  }
+
+  const meaningfulWords = words.filter(
+    (word) => !INITIALS_STOPWORDS.has(word.toLowerCase()),
+  );
+
+  return (
+    meaningfulWords
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase())
+      .join("") || "?"
+  );
+}
+
 const DEFAULT_SELECTION: RowSelection = {
   phone: "",
   dossier: "Trad",
@@ -250,6 +292,9 @@ export default function AdminPlayersPage() {
                   Email
                 </th>
                 <th className="px-3 py-3 text-left font-syne text-[12px] uppercase tracking-[0.6px] text-muted">
+                  Universite
+                </th>
+                <th className="px-3 py-3 text-left font-syne text-[12px] uppercase tracking-[0.6px] text-muted">
                   Dossier
                 </th>
                 <th className="px-3 py-3 text-left font-syne text-[12px] uppercase tracking-[0.6px] text-muted">
@@ -273,7 +318,7 @@ export default function AdminPlayersPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted">
                     Chargement des joueurs...
                   </td>
                 </tr>
@@ -281,7 +326,7 @@ export default function AdminPlayersPage() {
 
               {!loading && players.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted">
                     Aucun joueur trouve pour cette agence.
                   </td>
                 </tr>
@@ -320,6 +365,29 @@ export default function AdminPlayersPage() {
                         />
                       </td>
                       <td className="px-3 py-3 text-text-custom">{player.email}</td>
+                      <td className="px-3 py-3">
+                        {player.university_logo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={player.university_logo}
+                            alt={player.university_name}
+                            title={player.university_name}
+                            className="w-8 h-8 rounded-full object-cover border border-border-custom"
+                          />
+                        ) : (
+                          (() => {
+                            const initials = getInitials(player.university_name);
+                            return (
+                              <div
+                                title={player.university_name}
+                                className={`w-8 h-8 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold ${initials.length > 2 ? "text-[8px]" : "text-[11px]"}`}
+                              >
+                                {initials}
+                              </div>
+                            );
+                          })()
+                        )}
+                      </td>
                       <td className="px-3 py-3">
                         <select
                           className={`w-full rounded-lg border px-2.5 py-2 text-xs font-semibold outline-none ${getDossierClasses(row.dossier)}`}

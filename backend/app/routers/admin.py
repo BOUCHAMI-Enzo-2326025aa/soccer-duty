@@ -72,14 +72,14 @@ def admin_players(
     players = [player for player, _ in player_rows]
 
     university_ids = {p.university_id for p in players if p.university_id is not None}
-    universities = {}
+    universities: dict[int, models.University] = {}
     if university_ids:
         university_rows = (
             db.query(models.University)
             .filter(models.University.id.in_(list(university_ids)))
             .all()
         )
-        universities = {u.id: u.name for u in university_rows}
+        universities = {u.id: u for u in university_rows}
 
     from app.routers.player import _get_applicable_document_templates
 
@@ -113,6 +113,7 @@ def admin_players(
             round(documents_validated / documents_total * 100) if documents_total > 0 else 0
         )
 
+        university = universities.get(player.university_id)
         items.append(
             {
                 "id": player.id,
@@ -122,7 +123,8 @@ def admin_players(
                 "phone": player.phone,
                 "date_of_birth": player.date_of_birth.isoformat() if player.date_of_birth else None,
                 "university_id": player.university_id,
-                "university_name": universities.get(player.university_id, "Université non renseignée"),
+                "university_name": university.name if university else "Université non renseignée",
+                "university_logo": university.logo if university else None,
                 "progress_percentage": player.progress_percentage,
                 "dossier_stage": player.dossier_stage or "Trad",
                 "recruitment_status": player.recruitment_status or "Prospection",

@@ -32,6 +32,7 @@ export type AdminPlayer = {
   date_of_birth: string | null;
   university_id: number | null;
   university_name: string;
+  university_logo: string | null;
   progress_percentage: number;
   dossier_stage: "Trad" | "Eval" | "Done";
   recruitment_status:
