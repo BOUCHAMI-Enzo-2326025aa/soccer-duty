@@ -67,6 +67,11 @@ class User(Base):
     role = Column(Enum(RoleEnum), nullable=False)
     agency_id = Column(Integer, ForeignKey("agencies.id"), nullable=True) # Null si Super-Admin
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Vrai si le mot de passe actuel est celui généré par le serveur à la
+    # création du compte (jamais choisi par l'utilisateur) — sert à proposer
+    # un changement à la première connexion. Remis à False dès que
+    # l'utilisateur change son mot de passe OU ignore la proposition.
+    has_temporary_password = Column(Boolean, nullable=False, default=False, server_default="0")
 
     agency = relationship("Agency", back_populates="users")
     player_profile = relationship("PlayerProfile", back_populates="user", uselist=False)

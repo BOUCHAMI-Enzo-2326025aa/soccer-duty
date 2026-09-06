@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getAdminPlayers,
   getAdminTodo,
+  getAdminUniversities,
   getUserIdFromCookie,
   updateAdminPlayer,
   type AdminPendingDocument,
   type AdminPlayer,
+  type University,
 } from "@/lib/api";
 import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
+import CreatePlayerModal from "@/components/admin/CreatePlayerModal";
 
 type DossierOption = "Trad" | "Eval" | "Done";
 type StatutOption =
@@ -35,6 +38,7 @@ type RowSelection = {
   service: ServiceOption;
   canal: CanalOption;
   periode: PeriodeOption;
+  universityId: number | null;
 };
 
 const DOSSIER_OPTIONS: DossierOption[] = ["Trad", "Eval", "Done"];
@@ -105,6 +109,7 @@ const DEFAULT_SELECTION: RowSelection = {
   service: "Formule A",
   canal: "Formulaire",
   periode: "Spring",
+  universityId: null,
 };
 
 function getDossierClasses(value: DossierOption): string {
@@ -147,6 +152,8 @@ export default function AdminPlayersPage() {
     AdminPendingDocument[]
   >([]);
   const [openDocumentId, setOpenDocumentId] = useState<number | null>(null);
+  const [universities, setUniversities] = useState<University[]>([]);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const loadPlayers = async () => {
     setLoading(true);
@@ -159,12 +166,14 @@ export default function AdminPlayersPage() {
       }
 
       setAdminUserId(userId);
-      const [response, todo] = await Promise.all([
+      const [response, todo, universitiesResponse] = await Promise.all([
         getAdminPlayers(),
         getAdminTodo(),
+        getAdminUniversities(),
       ]);
       setPlayers(response.items);
       setPendingDocuments(todo.pending_documents);
+      setUniversities(universitiesResponse.items);
 
       const initialSelections: Record<number, RowSelection> = {};
       for (const player of response.items) {
@@ -175,6 +184,7 @@ export default function AdminPlayersPage() {
           service: player.service_plan,
           canal: player.acquisition_channel,
           periode: player.intake_period,
+          universityId: player.university_id,
         };
       }
       setSelections(initialSelections);
@@ -230,6 +240,7 @@ export default function AdminPlayersPage() {
         service_plan: row.service,
         acquisition_channel: row.canal,
         intake_period: row.periode,
+        university_id: row.universityId,
       };
 
       const updated = await updateAdminPlayer(playerId, payload);
@@ -246,6 +257,7 @@ export default function AdminPlayersPage() {
           service: updated.service_plan,
           canal: updated.acquisition_channel,
           periode: updated.intake_period,
+          universityId: updated.university_id,
         },
       }));
       setSaveInfo((prev) => ({ ...prev, [playerId]: "Sauvegarde OK" }));
@@ -259,13 +271,22 @@ export default function AdminPlayersPage() {
 
   return (
     <section>
-      <div className="mb-4 md:mb-5">
-        <h1 className="font-syne text-xl md:text-2xl font-extrabold text-navy">
-          Joueurs
-        </h1>
-        <p className="text-sm text-muted mt-1">
-          Liste des joueurs de l'agence associee ({playersCount})
-        </p>
+      <div className="mb-4 md:mb-5 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-syne text-xl md:text-2xl font-extrabold text-navy">
+            Joueurs
+          </h1>
+          <p className="text-sm text-muted mt-1">
+            Liste des joueurs de l'agence associee ({playersCount})
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCreateModalOpen(true)}
+          className="shrink-0 rounded-lg bg-green-custom px-3.5 py-2 text-xs font-semibold text-white"
+        >
+          + Ajouter un joueur
+        </button>
       </div>
 
       {error && (
@@ -366,27 +387,55 @@ export default function AdminPlayersPage() {
                       </td>
                       <td className="px-3 py-3 text-text-custom">{player.email}</td>
                       <td className="px-3 py-3">
-                        {player.university_logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={player.university_logo}
-                            alt={player.university_name}
-                            title={player.university_name}
-                            className="w-8 h-8 rounded-full object-cover border border-border-custom"
-                          />
-                        ) : (
-                          (() => {
-                            const initials = getInitials(player.university_name);
-                            return (
-                              <div
+                        <div className="flex flex-col gap-1.5 min-w-[140px]">
+                          <div className="relative w-8 h-8 shrink-0">
+                            {player.university_logo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={player.university_logo}
+                                alt={player.university_name}
                                 title={player.university_name}
-                                className={`w-8 h-8 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold ${initials.length > 2 ? "text-[8px]" : "text-[11px]"}`}
-                              >
-                                {initials}
-                              </div>
-                            );
-                          })()
-                        )}
+                                className="w-8 h-8 rounded-full object-cover border border-border-custom"
+                              />
+                            ) : (
+                              (() => {
+                                const initials = getInitials(player.university_name);
+                                return (
+                                  <div
+                                    title={player.university_name}
+                                    className={`w-8 h-8 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold ${initials.length > 2 ? "text-[8px]" : "text-[11px]"}`}
+                                  >
+                                    {initials}
+                                  </div>
+                                );
+                              })()
+                            )}
+                            {row.universityId === null && (
+                              <span
+                                title="Université non renseignée"
+                                className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-custom border border-white"
+                              />
+                            )}
+                          </div>
+                          <select
+                            className="w-full rounded-lg border border-border-custom bg-white px-2 py-1.5 text-[11px] text-text-custom outline-none"
+                            value={row.universityId ?? ""}
+                            onChange={(e) =>
+                              updateSelection(
+                                player.id,
+                                "universityId",
+                                e.target.value ? Number(e.target.value) : null,
+                              )
+                            }
+                          >
+                            <option value="">Non renseignée</option>
+                            {universities.map((university) => (
+                              <option key={university.id} value={university.id}>
+                                {university.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <select
@@ -514,6 +563,14 @@ export default function AdminPlayersPage() {
         }}
         onReviewed={loadPlayers}
       />
+
+      {createModalOpen && (
+        <CreatePlayerModal
+          universities={universities}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={loadPlayers}
+        />
+      )}
     </section>
   );
 }

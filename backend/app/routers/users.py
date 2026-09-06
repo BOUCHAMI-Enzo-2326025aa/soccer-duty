@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import models
 from app import schemas
 from app.security import hash_password, get_current_user
+from app.aiden_bridge import reset_aiden_identities
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -44,6 +45,9 @@ def create_user(
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    # Sans ça, AIDEN ignore ce compte jusqu'au prochain redémarrage du serveur
+    # (son IdentityStore n'est chargé qu'une fois, au premier appel).
+    reset_aiden_identities()
     return db_user
 
 

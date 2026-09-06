@@ -24,6 +24,8 @@ type AuthContextValue = AuthState & {
   isAuthenticated: boolean;
   setAuth: (data: LoginResponse) => void;
   clearAuth: () => void;
+  hasTemporaryPassword: boolean;
+  clearTemporaryPasswordFlag: () => void;
 };
 
 const EMPTY_AUTH: AuthState = { userId: null, role: null, tenant: null };
@@ -53,6 +55,10 @@ function clearAuthCookies(): void {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(EMPTY_AUTH);
+  // Signal ponctuel post-login, volontairement pas persisté en cookie : la
+  // proposition de changer le mot de passe ne doit s'afficher qu'une fois,
+  // juste après la connexion — pas se redéclencher à chaque rechargement.
+  const [hasTemporaryPassword, setHasTemporaryPassword] = useState(false);
 
   // Les cookies ne sont lisibles qu'au montage côté client (le rendu initial
   // côté serveur n'a pas accès à document.cookie).
@@ -63,16 +69,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setAuth = (data: LoginResponse) => {
     writeAuthCookies(data);
     setState({ userId: data.user_id, role: data.role, tenant: data.tenant });
+    setHasTemporaryPassword(data.has_temporary_password);
   };
 
   const clearAuth = () => {
     clearAuthCookies();
     setState(EMPTY_AUTH);
+    setHasTemporaryPassword(false);
   };
+
+  const clearTemporaryPasswordFlag = () => setHasTemporaryPassword(false);
 
   return (
     <AuthContext.Provider
-      value={{ ...state, isAuthenticated: state.userId !== null, setAuth, clearAuth }}
+      value={{
+        ...state,
+        isAuthenticated: state.userId !== null,
+        setAuth,
+        clearAuth,
+        hasTemporaryPassword,
+        clearTemporaryPasswordFlag,
+      }}
     >
       {children}
     </AuthContext.Provider>

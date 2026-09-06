@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.database import get_db
 from app.models import models
-from app.security import get_current_user
+from app.security import generate_temporary_password, get_current_user, hash_password
+from app.aiden_bridge import reset_aiden_identities
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -142,6 +143,74 @@ def admin_players(
     return {"count": len(items), "items": items}
 
 
+@router.post("/joueurs")
+def create_admin_player(
+    payload: schemas.AdminCreatePlayerPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+
+    if current_user.agency_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Votre compte n'est rattaché à aucune agence : impossible de créer un joueur",
+        )
+
+    existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email is already used")
+
+    university_name = "Université non renseignée"
+    university_logo = None
+    if payload.university_id is not None:
+        university = (
+            db.query(models.University)
+            .filter(models.University.id == payload.university_id)
+            .first()
+        )
+        if not university:
+            raise HTTPException(status_code=404, detail="University not found")
+        university_name = university.name
+        university_logo = university.logo
+
+    temporary_password = generate_temporary_password()
+
+    new_user = models.User(
+        email=payload.email,
+        hashed_password=hash_password(temporary_password),
+        role=models.RoleEnum.PLAYER,
+        agency_id=current_user.agency_id,
+        has_temporary_password=True,
+    )
+    db.add(new_user)
+    db.flush()  # attribue new_user.id sans clore la transaction
+
+    profile = models.PlayerProfile(
+        user_id=new_user.id,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        university_id=payload.university_id,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    # Sans ça, AIDEN ignore ce compte jusqu'au prochain redémarrage du serveur.
+    reset_aiden_identities()
+
+    return {
+        "id": profile.id,
+        "first_name": profile.first_name,
+        "last_name": profile.last_name,
+        "email": new_user.email,
+        "university_id": profile.university_id,
+        "university_name": university_name,
+        "university_logo": university_logo,
+        "temporary_password": temporary_password,
+    }
+
+
 def _assert_player_in_scope(current_user: models.User, profile: models.PlayerProfile) -> None:
     agency_id = _agency_scope(current_user)
     if agency_id is None:
@@ -226,12 +295,14 @@ def update_admin_player(
     player_profile.service_plan = payload.service_plan
     player_profile.acquisition_channel = payload.acquisition_channel
     player_profile.intake_period = payload.intake_period
+    player_profile.university_id = payload.university_id
 
     db.add(player_profile)
     db.commit()
     db.refresh(player_profile)
 
     university_name = "Université non renseignée"
+    university_logo = None
     if player_profile.university_id is not None:
         university = (
             db.query(models.University)
@@ -240,6 +311,7 @@ def update_admin_player(
         )
         if university:
             university_name = university.name
+            university_logo = university.logo
 
     return {
         "id": player_profile.id,
@@ -250,6 +322,7 @@ def update_admin_player(
         "date_of_birth": player_profile.date_of_birth.isoformat() if player_profile.date_of_birth else None,
         "university_id": player_profile.university_id,
         "university_name": university_name,
+        "university_logo": university_logo,
         "progress_percentage": player_profile.progress_percentage,
         "dossier_stage": player_profile.dossier_stage or "Trad",
         "recruitment_status": player_profile.recruitment_status or "Prospection",
@@ -486,11 +559,30 @@ def admin_todo(
         .filter(models.PlayerProfile.progress_percentage >= 80)
         .all()
     )
+
+    missing_university_query = (
+        db.query(models.PlayerProfile, models.User)
+        .join(models.User, models.PlayerProfile.user_id == models.User.id)
+        .filter(
+            models.User.role == models.RoleEnum.PLAYER,
+            models.PlayerProfile.university_id.is_(None),
+        )
+    )
+    if agency_id is not None:
+        missing_university_query = missing_university_query.filter(
+            models.User.agency_id == agency_id
+        )
+    players_missing_university = [
+        {"player_id": player.id, "player_name": f"{player.first_name} {player.last_name}"}
+        for player, user in missing_university_query.all()
+    ]
+
     return {
         "pending_documents": pending_documents,
         "upcoming_milestones": upcoming_milestones,
         "rejected_documents": rejected_documents,
         "ready_players": ready_players,
+        "players_missing_university": players_missing_university,
     }
 
 

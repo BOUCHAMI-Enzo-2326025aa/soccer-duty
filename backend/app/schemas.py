@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+import re
+
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
 from app.models.models import RoleEnum, DocCategoryEnum, ApplicationScopeEnum
@@ -71,6 +73,21 @@ class UserLogin(BaseModel):
     password: str
 
 
+class ChangePasswordPayload(BaseModel):
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_password_policy(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
+        if not re.search(r"[A-Za-z]", value):
+            raise ValueError("Le mot de passe doit contenir au moins une lettre")
+        if not re.search(r"[0-9]", value):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        return value
+
+
 AdminDossierStage = Literal["Trad", "Eval", "Done"]
 AdminRecruitmentStatus = Literal[
     "Prospection",
@@ -98,6 +115,24 @@ class AdminPlayerUpdate(BaseModel):
     service_plan: AdminServicePlan
     acquisition_channel: AdminAcquisitionChannel
     intake_period: AdminIntakePeriod
+    university_id: Optional[int] = None
+
+
+class AdminCreatePlayerPayload(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    university_id: Optional[int] = None
+
+
+class AdminCreatePlayerResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    university_id: Optional[int]
+    university_name: str
+    temporary_password: str
 
 
 class AdminPlayerResponse(BaseModel):

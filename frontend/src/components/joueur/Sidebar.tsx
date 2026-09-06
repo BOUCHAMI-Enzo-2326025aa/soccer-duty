@@ -142,12 +142,15 @@ export default function Sidebar({
           </div>
         </div>
 
-        <div className="m-3.5 mb-4 bg-gradient-to-br from-navy to-navy-light text-white rounded-[10px] p-3 cursor-pointer text-center">
+        <Link
+          href="/joueur/ia"
+          className="m-3.5 mb-4 bg-gradient-to-br from-navy to-navy-light text-white rounded-[10px] p-3 cursor-pointer text-center block"
+        >
           <div className="text-[13px] font-semibold">🤖 Chatbot IA</div>
           <div className="text-[10px] text-white/50 mt-0.5">
             Posez vos questions
           </div>
-        </div>
+        </Link>
       </aside>
     </>
   );

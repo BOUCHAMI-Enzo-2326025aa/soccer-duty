@@ -15,6 +15,7 @@ export type LoginResponse = {
   role: "SUPER_ADMIN" | "ADMIN" | "PLAYER" | "DEVELOPER" | "SUPPORT" | "AI";
   token: string;
   tenant: string; // Ajout du tenant AIDEN (ex: "GLOBAL" ou "1")
+  has_temporary_password: boolean;
 };
 
 type AdminHomeResponse = {
@@ -75,6 +76,7 @@ export type UpdateAdminPlayerPayload = {
     | "Bouche à oreille"
     | "Formulaire";
   intake_period: "Spring" | "Fall";
+  university_id: number | null;
 };
 
 type ListResponse<T> = {
@@ -173,6 +175,20 @@ export async function login(email: string, password: string) {
 export async function logout() {
   return apiFetch<{ message: string }>("/auth/logout", {
     auth: false,
+    method: "POST",
+  });
+}
+
+export async function changePassword(newPassword: string) {
+  return apiFetch<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
+export async function dismissPasswordReminder() {
+  return apiFetch<{ message: string }>("/auth/dismiss-password-reminder", {
     method: "POST",
   });
 }
@@ -341,12 +357,18 @@ export type AdminPendingDocument = {
   submitted_at: string | null;
 };
 
+export type AdminMissingUniversityPlayer = {
+  player_id: number;
+  player_name: string;
+};
+
 export async function getAdminTodo() {
   return apiFetch<{
     pending_documents: AdminPendingDocument[];
     upcoming_milestones: Array<{ id: number }>;
     rejected_documents: Array<{ id: number }>;
     ready_players: Array<{ id: number }>;
+    players_missing_university: AdminMissingUniversityPlayer[];
   }>("/admin/todo");
 }
 
@@ -369,6 +391,32 @@ export async function updateAdminPlayer(
     headers: {
       "Content-Type": "application/json",
     },
+    body: JSON.stringify(payload),
+  });
+}
+
+export type CreateAdminPlayerPayload = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  university_id: number | null;
+};
+
+export type CreatedAdminPlayer = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  university_id: number | null;
+  university_name: string;
+  university_logo: string | null;
+  temporary_password: string;
+};
+
+export async function createAdminPlayer(payload: CreateAdminPlayerPayload) {
+  return apiFetch<CreatedAdminPlayer>("/admin/joueurs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
