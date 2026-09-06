@@ -31,13 +31,46 @@ const EMPTY_FORM: FormState = {
   contact_email: "",
 };
 
+const INITIALS_STOPWORDS = new Set([
+  "of",
+  "the",
+  "and",
+  "de",
+  "des",
+  "du",
+  "la",
+  "le",
+  "les",
+]);
+
 function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "?";
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+
+  const words = trimmed.replace(/[(),]/g, " ").split(/\s+/).filter(Boolean);
+
+  // Un mot deja tout en majuscules ("UCLA", "NYU", "IMT") est un abrege
+  // fourni par l'etablissement lui-meme : on le reprend tel quel (jusqu'a
+  // 4 lettres) plutot que d'en tirer des initiales artificielles.
+  const acronym = words.find((word) => {
+    const letters = word.replace(/[^A-Za-z]/g, "");
+    return letters.length >= 2 && letters === letters.toUpperCase();
+  });
+  if (acronym) {
+    const letters = acronym.replace(/[^A-Za-z]/g, "");
+    return letters.length <= 4 ? letters : letters.slice(0, 2);
+  }
+
+  const meaningfulWords = words.filter(
+    (word) => !INITIALS_STOPWORDS.has(word.toLowerCase()),
+  );
+
+  return (
+    meaningfulWords
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase())
+      .join("") || "?"
+  );
 }
 
 export default function AdminUniversitiesPage() {
@@ -198,9 +231,16 @@ export default function AdminUniversitiesPage() {
                           className="w-8 h-8 rounded-full object-cover border border-border-custom"
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold text-[11px]">
-                          {getInitials(university.name)}
-                        </div>
+                        (() => {
+                          const initials = getInitials(university.name);
+                          return (
+                            <div
+                              className={`w-8 h-8 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold ${initials.length > 2 ? "text-[8px]" : "text-[11px]"}`}
+                            >
+                              {initials}
+                            </div>
+                          );
+                        })()
                       )}
                     </td>
                     <td className="px-3 py-3 font-semibold text-text-custom">
@@ -241,9 +281,16 @@ export default function AdminUniversitiesPage() {
                   className="w-10 h-10 rounded-full object-cover border border-border-custom shrink-0"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold text-xs shrink-0">
-                  {getInitials(selectedUniversity.name)}
-                </div>
+                (() => {
+                  const initials = getInitials(selectedUniversity.name);
+                  return (
+                    <div
+                      className={`w-10 h-10 rounded-full bg-gradient-to-br from-navy-light to-navy text-white flex items-center justify-center font-syne font-bold shrink-0 ${initials.length > 2 ? "text-[9px]" : "text-xs"}`}
+                    >
+                      {initials}
+                    </div>
+                  );
+                })()
               )}
               <h2 className="font-syne text-base font-bold text-navy flex-1">
                 {selectedUniversity.name}

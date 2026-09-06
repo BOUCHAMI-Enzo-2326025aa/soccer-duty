@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import models
 from app import schemas
-from app.aiden_bridge import AIDEN_COOKIE_NAME, AIDEN_REFRESH_COOKIE_NAME, get_aiden
+from app.aiden_bridge import (
+    AIDEN_COOKIE_NAME,
+    AIDEN_REFRESH_COOKIE_NAME,
+    aiden_secret_for_user,
+    get_aiden,
+)
+from app.security import create_access_token, get_current_user, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 legacy_router = APIRouter(tags=["auth"])
@@ -18,7 +24,7 @@ class LogoutResponse(BaseModel):
 def _login(credentials: schemas.UserLogin, db: Session, response: Response):
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
 
-    if not user or user.hashed_password != credentials.password:
+    if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
 
     # --- Logique AIDEN : conversion de l'agency_id en tenant (chaîne de caractères) ---
@@ -30,7 +36,9 @@ def _login(credentials: schemas.UserLogin, db: Session, response: Response):
     # dans ce cas on ignore l'échec, l'IA sera juste indisponible pour cette
     # session jusqu'au prochain login (ou redémarrage du serveur).
     aiden_app = get_aiden()
-    code, body = aiden_app.login({"login": user.email, "password": credentials.password})
+    code, body = aiden_app.login(
+        {"login": user.email, "password": aiden_secret_for_user(user.id)}
+    )
     if code == 200:
         response.set_cookie(
             key=AIDEN_COOKIE_NAME,
@@ -53,7 +61,8 @@ def _login(credentials: schemas.UserLogin, db: Session, response: Response):
         "email": user.email,
         "role": user.role,
         "tenant": aiden_tenant,
-        "token": f"fake_token_for_now_{user.id}",
+        "token": create_access_token(user),
+        "has_temporary_password": user.has_temporary_password,
     }
 
 
@@ -75,9 +84,35 @@ def logout(response: Response):
     return {"message": "Logout successful"}
 
 
-@router.get("/me/{user_id}", response_model=schemas.UserResponse)
-def me(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@router.post("/change-password")
+def change_password(
+    payload: schemas.ChangePasswordPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    current_user.hashed_password = hash_password(payload.new_password)
+    current_user.has_temporary_password = False
+    db.add(current_user)
+    db.commit()
+    return {"message": "Mot de passe mis à jour"}
+
+
+@router.post("/dismiss-password-reminder")
+def dismiss_password_reminder(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    current_user.has_temporary_password = False
+    db.add(current_user)
+    db.commit()
+    return {"message": "ok"}
+
+
+@router.get("/me", response_model=schemas.UserResponse)
+def me(current_user: models.User = Depends(get_current_user)):
+    # Contrairement à l'ancienne route /me/{user_id} (supprimée), l'identité
+    # vient ici du token vérifié, pas d'un ID fourni par le client — c'est le
+    # modèle à suivre quand on verrouillera les autres endpoints (étape 3).
+    # Non utilisée par le frontend pour l'instant (aucune régression), sert
+    # de point de départ concret.
+    return current_user

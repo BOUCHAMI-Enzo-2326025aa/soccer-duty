@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import models
+from app.security import get_current_user
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -19,16 +20,6 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads"
 ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 Mo
-
-
-class DocumentCreate(BaseModel):
-    player_id: int
-    document_template_id: int
-    s3_url: str | None = None
-
-
-class DocumentStatusUpdate(BaseModel):
-    status: models.DocStatusEnum
 
 
 class DocumentReviewUpdate(BaseModel):
@@ -67,43 +58,20 @@ def _notify_agency_admins_of_pending_document(
         db.commit()
 
 
-@router.post("/")
-def create_document(payload: DocumentCreate, db: Session = Depends(get_db)):
-    player = db.query(models.PlayerProfile).filter(models.PlayerProfile.id == payload.player_id).first()
-    if not player:
-        raise HTTPException(status_code=404, detail="Player profile not found")
-
-    template = (
-        db.query(models.DocumentTemplate)
-        .filter(models.DocumentTemplate.id == payload.document_template_id)
-        .first()
-    )
-    if not template:
-        raise HTTPException(status_code=404, detail="Document template not found")
-
-    document = models.Document(
-        player_id=payload.player_id,
-        document_template_id=payload.document_template_id,
-        s3_url=payload.s3_url,
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-    return document
-
-
 @router.post("/upload")
 async def upload_document(
     user_id: int = Form(...),
     document_template_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     from app.routers.player import _get_applicable_document_templates
 
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=403, detail="Vous ne pouvez envoyer un document que pour vous-même"
+        )
 
     profile = (
         db.query(models.PlayerProfile)
@@ -169,29 +137,6 @@ async def upload_document(
     return document
 
 
-@router.get("/player/{player_id}")
-def get_player_documents(player_id: int, db: Session = Depends(get_db)):
-    docs = db.query(models.Document).filter(models.Document.player_id == player_id).all()
-    return {"count": len(docs), "items": docs}
-
-
-@router.patch("/{document_id}/status")
-def update_document_status(
-    document_id: int,
-    payload: DocumentStatusUpdate,
-    db: Session = Depends(get_db),
-):
-    document = db.query(models.Document).filter(models.Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    document.status = payload.status
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-    return document
-
-
 def _get_document_or_404(document_id: int, db: Session) -> models.Document:
     document = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not document:
@@ -200,6 +145,9 @@ def _get_document_or_404(document_id: int, db: Session) -> models.Document:
 
 
 def _assert_admin_can_review(admin_user: models.User, document: models.Document, db: Session) -> None:
+    if admin_user.role not in (models.RoleEnum.ADMIN, models.RoleEnum.SUPER_ADMIN):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+
     if admin_user.role != models.RoleEnum.ADMIN or admin_user.agency_id is None:
         return
 
@@ -277,21 +225,21 @@ def _serialize_document_review(document: models.Document, db: Session) -> dict:
 @router.get("/{document_id}")
 def get_document_detail(
     document_id: int,
-    admin_user_id: int | None = None,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     document = _get_document_or_404(document_id, db)
+    _assert_admin_can_review(current_user, document, db)
 
     # Marque comme lues les notifications liées, côté admin qui consulte —
     # ouvrir la fiche compte comme avoir pris connaissance, indépendamment
     # de la décision (valider/refuser) qui viendra plus tard ou pas.
-    if admin_user_id is not None:
-        db.query(models.Notification).filter(
-            models.Notification.related_document_id == document_id,
-            models.Notification.user_id == admin_user_id,
-            models.Notification.is_read.is_(False),
-        ).update({"is_read": True})
-        db.commit()
+    db.query(models.Notification).filter(
+        models.Notification.related_document_id == document_id,
+        models.Notification.user_id == current_user.id,
+        models.Notification.is_read.is_(False),
+    ).update({"is_read": True})
+    db.commit()
 
     return _serialize_document_review(document, db)
 
@@ -300,19 +248,15 @@ def get_document_detail(
 def review_document(
     document_id: int,
     payload: DocumentReviewUpdate,
-    admin_user_id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    admin_user = db.query(models.User).filter(models.User.id == admin_user_id).first()
-    if not admin_user:
-        raise HTTPException(status_code=404, detail="Admin user not found")
-
     document = _get_document_or_404(document_id, db)
-    _assert_admin_can_review(admin_user, document, db)
+    _assert_admin_can_review(current_user, document, db)
 
     document.status = models.DocStatusEnum[payload.status]
     document.admin_comment = payload.admin_comment
-    document.reviewed_by = admin_user_id
+    document.reviewed_by = current_user.id
     document.reviewed_at = datetime.now(timezone.utc)
 
     db.query(models.Notification).filter(

@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getAdminTodo,
-  getUserIdFromCookie,
-  type AdminPendingDocument,
-} from "@/lib/api";
+import { getAdminTodo, type AdminPendingDocument } from "@/lib/api";
 import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
 
 export default function AdminTodoPage() {
@@ -21,8 +17,7 @@ export default function AdminTodoPage() {
     setError("");
 
     try {
-      const adminUserId = getUserIdFromCookie();
-      const response = await getAdminTodo(adminUserId);
+      const response = await getAdminTodo();
       setPendingDocuments(response.pending_documents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de chargement");

@@ -10,8 +10,10 @@ import {
   getAdminUniversities,
   type AdminPlayer,
   type PlayerDocumentItem,
+  type University,
 } from "@/lib/api";
 import DocumentReviewModal from "@/components/admin/DocumentReviewModal";
+import CreatePlayerModal from "@/components/admin/CreatePlayerModal";
 
 type FilterMode =
   | "tous"
@@ -260,6 +262,8 @@ export default function AdminHomePage() {
     ongoing: 0,
     docsToValidate: 0,
   });
+  const [universitiesList, setUniversitiesList] = useState<University[]>([]);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const loadStats = async () => {
     setLoadingStats(true);
@@ -288,6 +292,7 @@ export default function AdminHomePage() {
         ongoing,
         docsToValidate: Math.max(notifications.count, docsToValidate),
       });
+      setUniversitiesList(universities.items);
       setPlayers(playersResponse.items);
       setSelectedPlayer((prev) => {
         if (prev) {
@@ -490,9 +495,13 @@ export default function AdminHomePage() {
             <div className="font-syne text-[15px] font-bold text-navy dark:text-white">
               Joueurs
             </div>
-            <span className="text-[12.5px] text-green-custom font-semibold cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setCreateModalOpen(true)}
+              className="text-[12.5px] text-green-custom font-semibold cursor-pointer"
+            >
               + Ajouter
-            </span>
+            </button>
           </div>
 
           <div className="flex gap-[7px] mb-3.5 overflow-x-auto pb-1 scbar-hidden">
@@ -641,6 +650,14 @@ export default function AdminHomePage() {
         onClose={() => setReviewDocumentId(null)}
         onReviewed={handleReviewed}
       />
+
+      {createModalOpen && (
+        <CreatePlayerModal
+          universities={universitiesList}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={loadStats}
+        />
+      )}
     </>
   );
 }

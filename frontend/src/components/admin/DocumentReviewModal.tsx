@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   getApiFileUrl,
   getDocumentReview,
-  getUserIdFromCookie,
   markNotificationUnread,
   reviewDocument,
   type DocumentReviewDetail,
@@ -51,8 +50,7 @@ export default function DocumentReviewModal({
       setLoading(true);
       setError("");
       try {
-        const adminUserId = getUserIdFromCookie();
-        const data = await getDocumentReview(documentId, adminUserId);
+        const data = await getDocumentReview(documentId);
         setDetail(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erreur de chargement");
@@ -82,20 +80,14 @@ export default function DocumentReviewModal({
 
   const handleSubmitReview = async () => {
     if (!detail || !actionMode) return;
-    const adminUserId = getUserIdFromCookie();
-    if (!adminUserId) {
-      setError("Session admin introuvable. Reconnectez-vous.");
-      return;
-    }
 
     setSubmitting(true);
     setError("");
     try {
-      await reviewDocument(
-        detail.document_id,
-        { status: actionMode, admin_comment: comment.trim() || null },
-        adminUserId,
-      );
+      await reviewDocument(detail.document_id, {
+        status: actionMode,
+        admin_comment: comment.trim() || null,
+      });
       onReviewed();
       onClose();
     } catch (err) {

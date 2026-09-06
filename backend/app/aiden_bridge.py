@@ -23,8 +23,12 @@ Variables d'environnement attendues (.env, à ne JAMAIS committer) :
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+
 from app.database import SessionLocal
 from app.models import models
+from app.security import SECRET_KEY
 
 from aiden.config import load_config
 from aiden.api.gateway_server import AidenApp
@@ -59,6 +63,22 @@ AIDEN_COOKIE_NAME = "aiden_access"
 AIDEN_REFRESH_COOKIE_NAME = "aiden_refresh"
 
 
+def aiden_secret_for_user(user_id: int) -> str:
+    """Secret d'appariement AIDEN pour un utilisateur donné.
+
+    AIDEN a son propre login (email + "mot de passe"), indépendant de celui
+    de Soccer Duty : son IdentityStore stocke un simple SHA-256 de la valeur
+    fournie et compare au moment du login (voir aiden/api/identity.py). Cette
+    fonction dérive une valeur stable à partir de SECRET_KEY + l'id utilisateur
+    plutôt que de réutiliser le vrai mot de passe Soccer Duty — nécessaire
+    depuis que `hashed_password` contient un vrai hash bcrypt (salé, donc
+    jamais deux fois identique) et non plus le mot de passe en clair.
+    """
+    return hmac.new(
+        SECRET_KEY.encode(), str(user_id).encode(), hashlib.sha256
+    ).hexdigest()
+
+
 _app: AidenApp | None = None
 
 
@@ -72,14 +92,7 @@ def _build_identity_store() -> IdentityStore:
             role = ROLE_MAP.get(user.role, "PLAYER")
             identities.add(
                 login=user.email,
-                # TODO SÉCURITÉ : `hashed_password` contient aujourd'hui le mot de
-                # passe EN CLAIR (voir auth.py : comparaison directe, pas de hash).
-                # IdentityStore le hache lui-même en SHA-256 en interne, donc ça
-                # fonctionne pour l'instant. Le jour où hashed_password devient un
-                # vrai hash bcrypt/argon2, il faudra arrêter de le repasser ici et
-                # déléguer la vérification à ton système existant (voir le guide,
-                # étape 2 : "Note importante sur les mots de passe").
-                password=user.hashed_password,
+                password=aiden_secret_for_user(user.id),
                 tenant=tenant,
                 roles=[role],
             )

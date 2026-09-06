@@ -117,7 +117,7 @@ export default function AdminDocumentsPage() {
         setAdminUserId(userId);
 
         const [templatesResponse, universitiesResponse] = await Promise.all([
-          getAdminDocumentTemplates(userId),
+          getAdminDocumentTemplates(),
           getAdminUniversities(),
         ]);
         setTemplates(templatesResponse.items);
@@ -220,13 +220,12 @@ export default function AdminDocumentsPage() {
         const updated = await updateDocumentTemplate(
           editingTemplate.id,
           payload,
-          adminUserId,
         );
         setTemplates((prev) =>
           prev.map((t) => (t.id === updated.id ? updated : t)),
         );
       } else {
-        const created = await createDocumentTemplate(payload, adminUserId);
+        const created = await createDocumentTemplate(payload);
         setTemplates((prev) => [...prev, created]);
       }
 
@@ -251,7 +250,7 @@ export default function AdminDocumentsPage() {
 
     setDeletingId(template.id);
     try {
-      await deleteDocumentTemplate(template.id, adminUserId);
+      await deleteDocumentTemplate(template.id);
       setTemplates((prev) => prev.filter((t) => t.id !== template.id));
     } catch (err) {
       setError(
